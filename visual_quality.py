@@ -42,14 +42,14 @@ def _read_chroma(path: Path) -> dict[float, tuple[float, float]]:
     time = None
     u = v = None
     for line in path.read_text(encoding="utf-8").splitlines():
-        found_time = re.search(r"pts_time:([0-9]+(?:\\.[0-9]+)?)", line)
+        found_time = re.search(r"pts_time:([0-9]+(?:\.[0-9]+)?)", line)
         if found_time:
             if time is not None and u is not None and v is not None:
                 values[time] = (u, v)
             time = round(float(found_time.group(1)), 2)
             u = v = None
-        found_u = re.search(r"lavfi\\.signalstats\\.UAVG=([0-9]+(?:\\.[0-9]+)?)", line)
-        found_v = re.search(r"lavfi\\.signalstats\\.VAVG=([0-9]+(?:\\.[0-9]+)?)", line)
+        found_u = re.search(r"lavfi\.signalstats\.UAVG=([0-9]+(?:\.[0-9]+)?)", line)
+        found_v = re.search(r"lavfi\.signalstats\.VAVG=([0-9]+(?:\.[0-9]+)?)", line)
         if found_u:
             u = float(found_u.group(1))
         if found_v:
