@@ -70,6 +70,21 @@ class ColorConsistencyTests(unittest.TestCase):
         filters = adaptive_shot_filters(items, clips, "fitness", base)
         self.assertEqual(filters[1], base["source_grades"][0]["filter"])
 
+    def test_clipped_highlights_and_shadows_are_not_amplified(self):
+        from editor import Clip
+        from color_grade import adaptive_shot_filters
+        high = [VisualSample(i * .5, 65, 6, 20, 128, 128, 12, 246)
+                for i in range(12)]
+        low = [VisualSample(i * .5, 180, 6, 20, 128, 128, 6, 222)
+               for i in range(12)]
+        plan = grade_plan([high, low], "sport")
+        self.assertLessEqual(plan["source_grades"][0]["brightness"], 0)
+        self.assertGreaterEqual(plan["source_grades"][1]["brightness"], 0)
+        high_shot = adaptive_shot_filters(high, [Clip(0, 5, 1)], "sport", plan, 0)[0]
+        low_shot = adaptive_shot_filters(low, [Clip(0, 5, 1)], "sport", plan, 1)[0]
+        self.assertIn("brightness=0.0000", high_shot)
+        self.assertIn("brightness=0.0000", low_shot)
+
     def test_dark_or_unknown_rush_not_forcibly_graded(self):
         result = grade_plan([samples(9), []], "lifestyle")
         self.assertIsNone(result["source_grades"][0]["filter"])
@@ -138,6 +153,23 @@ class ChronologyTests(unittest.TestCase):
             self.assertEqual(method, "capture_anchors_visual_gaps")
             self.assertLess(order.index(2), order.index(0))
             self.assertEqual(sorted(order), list(range(4)))
+
+    def test_visual_continuity_is_upload_order_independent(self):
+        from montage import continuity_story_order
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder) / f"{i}.mp4" for i in range(6)]
+            for i, path in enumerate(paths):
+                path.write_bytes(bytes([i + 1]) * 100)
+            signals = [
+                [VisualSample(j*.5, 70 + i*13, i*3, 18, 120+i, 138-i)
+                 for j in range(12)] for i in range(6)
+            ]
+            first = continuity_story_order(paths, signals)
+            permutation = [3, 1, 5, 0, 4, 2]
+            shuffled = [paths[i] for i in permutation]
+            second = continuity_story_order(shuffled, [signals[i] for i in permutation])
+            self.assertEqual([paths[i] for i in first],
+                             [shuffled[i] for i in second])
 
     def test_partial_dates_do_not_invent_camera_timeline(self):
         with tempfile.TemporaryDirectory() as folder:
