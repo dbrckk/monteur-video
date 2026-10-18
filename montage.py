@@ -14,6 +14,7 @@ from typing import Callable, Sequence
 
 from editor import THEMES, detect_scenes, edit_video, execute, probe_media, social_metadata
 from visual_quality import analyze_visual
+from soundtrack import select_music_profile
 
 MAX_SOURCES = 10
 FILTER_PRESETS = {
@@ -229,6 +230,10 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         target_seconds = automatic_duration([item["duration"] for item in info],
                                             [len(s) for s in scene_cache],
                                             activity_seconds=activity_seconds)
+    music_profile = select_music_profile(
+        theme, [sample for rush in quality_cache for sample in rush],
+        scene_count=sum(map(len, scene_cache)),
+        source_seconds=sum(item["duration"] for item in info))
     budgets = allocation([item["duration"] for item in info], target_seconds)
     order = narrative_order([Path(source) for source in sources], quality_cache)
     if progress:
@@ -240,10 +245,12 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                             progress=(lambda p, stage: progress(0.32 + p * 0.62, stage))
                             if progress else None,
                             detected_scenes=scene_cache[0],
-                            visual_samples=quality_cache[0])
+                            visual_samples=quality_cache[0],
+                            music_profile=music_profile)
         result["target_duration_seconds"] = target_seconds
         result["duration_mode"] = "auto" if auto_mode else "manual"
         result["source_count"] = 1
+        result["music_profile"] = music_profile
         result["sequence_strategy"] = "energy_arc"
         result["sequence_order"] = [0]
         result["sources"] = [{
@@ -271,6 +278,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             allow_short=True,
             detected_scenes=scene_cache[index],
             visual_samples=quality_cache[index],
+            music_profile=music_profile,
             progress=(lambda p, stage, position=position: progress(
                 min(0.94, 0.32 + (position + p) / len(sources) * 0.62), stage))
             if progress else None,
@@ -302,6 +310,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "duration_mode": "auto" if auto_mode else "manual",
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
+        "music_profile": music_profile,
         "sequence_strategy": "energy_arc",
         "sequence_order": order,
         "visual_analysis": ("motion_luminance_detail" if any(
