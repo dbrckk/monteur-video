@@ -6,6 +6,7 @@ two synthetic source MP4s and tests the same UI the Android browser loads.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -53,7 +54,7 @@ def main() -> None:
             page.locator("#seconds").select_option("30")
             page.locator("#start").click()
             expect(page.locator("#preview")).to_be_visible(timeout=180_000)
-            expect(page.locator("#resultVideo")).to_have_attribute("src", ".*")
+            expect(page.locator("#resultVideo")).to_have_attribute("src", re.compile(r".*/download\\?"))
             expect(page.locator("#filterOptions button")).to_have_count(7)
             expect(page.locator("#metadata")).to_be_visible()
             # A fitness-recommended grade should be rendered by the backend.
