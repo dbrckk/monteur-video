@@ -50,6 +50,7 @@
     .hint{border-left:3px solid #cafa51;padding:11px 13px;background:#1b2930;border-radius:7px;margin:14px 0;color:#d3e3e7;font-size:13px;line-height:1.55}
     .secondary{border:1px solid #516451;color:#cafa51;background:transparent;border-radius:11px;padding:13px 16px;min-height:48px;cursor:pointer;font-weight:700}
     #resumeJob{display:none;margin-top:10px;width:100%}
+    a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #cafa51;outline-offset:3px}
     .rush-list{list-style:none;counter-reset:rush;padding:0;margin:12px 0 0;display:grid;gap:9px}.rush-list li{display:flex;gap:12px;align-items:center;padding:11px 12px;border:1px solid #34474e;border-radius:11px;background:#111e28;font-size:13px}.rush-no{display:grid;place-items:center;width:29px;height:29px;flex:none;border-radius:8px;background:#cafa51;color:#102112;font-weight:900}.rush-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rush-size{color:#a7b4bf;white-space:nowrap}
     .rush-actions{display:flex;gap:5px;flex:none}.rush-actions button{min-width:32px;min-height:35px;padding:4px;border-radius:7px;border:1px solid #405252;background:#1b2b33;color:#d9f0df;cursor:pointer}.rush-actions button:disabled{opacity:.25;cursor:default}
     .filter-panel{display:none;margin-top:24px;border-top:1px solid #2d4247;padding-top:24px}.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;margin:17px 0}.filter-choice{display:flex;flex-direction:column;align-items:stretch;text-align:left;gap:6px;padding:9px;background:#0d1823;color:#e2edf2;border:1px solid #34424a;border-radius:12px;cursor:pointer;min-height:136px;transition:border-color .2s}.filter-choice[aria-pressed="true"]{border-color:#cafa51;box-shadow:0 0 0 1px #cafa51}.filter-choice strong{font-size:13px}.filter-choice small{font-size:11px;color:#a8bac3;line-height:1.4}.filter-swatch{height:57px;border-radius:7px;background:linear-gradient(140deg,#e9ad69 0%,#687b8e 42%,#17293c 100%)}.filter-apply{width:100%}.filter-apply:disabled{opacity:.45;cursor:not-allowed}
@@ -84,7 +85,10 @@
     <label class="setting" for="seconds">Durée du montage (secondes)</label>
     <select id="seconds"><option value="30">30 s · Impact rapide</option><option value="45" selected>45 s · Reel conseillé</option><option value="60">60 s · Narration</option><option value="90">90 s · Plus détaillé</option><option value="180">180 s · Long extrait</option></select>
     <label class="setting" for="backend">Adresse HTTPS du moteur de montage</label><input id="backend" type="url" placeholder="https://api.example.com"><button type="button" class="copy" id="saveBackend" style="margin-top:10px">Enregistrer le moteur</button><label class="setting" for="token">Clé d'accès (uniquement si serveur protégé)</label>
-    <input id="token" type="password" autocomplete="off" placeholder="Facultatif en local">
+    <input id="token" type="password" autocomplete="off" placeholder="Clé privée fournie au démarrage du moteur">
+    <button id="testBackend" class="secondary" type="button" style="width:100%;margin-top:10px">Vérifier la connexion du moteur</button>
+    <p id="backendStatus" class="muted" role="status" aria-live="polite">Site gratuit : un moteur FFmpeg doit être relié pour produire les MP4.</p>
+    <p class="muted"><a href="https://github.com/dbrckk/monteur-video/blob/main/docs/REMOTE_ANDROID.md" target="_blank" rel="noopener noreferrer" style="color:#cafa51">Guide : activer le moteur gratuitement depuis un PC</a></p>
     <div class="hint" id="mobileHelp">Pendant l’envoi, garde cet onglet ouvert et le téléphone connecté. Si l’envoi est interrompu, reviens ici et sélectionne à nouveau les mêmes vidéos pour reprendre le transfert. Après l’envoi complet, le serveur poursuit le montage même si tu quittes le site.</div>
     <button id="start" class="btn">Créer mon montage →</button>
     <button id="resumeJob" class="secondary" type="button">Retrouver mon dernier montage</button>
@@ -104,6 +108,8 @@
   <div class="statusrow"><span id="stage">Initialisation</span><strong id="percent">0 %</strong></div>
   <div class="bar"><div id="progress"></div></div>
   <p id="message" class="muted">Le traitement continue tant que le serveur est actif.</p>
+  <button id="retryRender" type="button" class="secondary" style="display:none;width:100%">Relancer le rendu sans renvoyer les vidéos</button>
+  <p id="retention" class="muted"></p>
   <div class="preview" id="preview">
     <video id="resultVideo" controls playsinline preload="metadata"></video>
     <a class="download" id="download" href="#" download>Télécharger le MP4 sur mon téléphone ↓</a>
@@ -129,6 +135,7 @@
   const $ = id => document.getElementById(id); const API_BASE = (localStorage.getItem("backendUrl") || "").replace(/\/$/, ""); const apiPath = path => API_BASE + path;
   const drop = $("drop"), input = $("video"), button = $("start");
   let pollTimer;
+  let pollFailures = 0;
   const isStatic = location.hostname.endsWith("github.io") || location.hostname.endsWith("shipstatic.com");
   if(isStatic && !API_BASE) { $("mobileHelp").textContent = "Site statique : renseigne d’abord l’adresse HTTPS du moteur de montage. GitHub Pages ne peut pas traiter les vidéos à lui seul."; }
   const stages = {probe:"Vérification des médias",speech:"Transcription de la voix",scenes:"Détection des plans",silence:"Recherche des silences",render:"Encodage des séquences",queued:"En attente du moteur",done:"Montage terminé",failed:"Échec de production"};
@@ -157,14 +164,16 @@
     if(!response.ok) {
       let description = response.statusText;
       try { const data = await response.json(); description = data.detail || description; } catch {}
-      throw new Error(description + " (" + response.status + ")");
+      const error = new Error(description + " (" + response.status + ")");
+      error.status = response.status;
+      throw error;
     }
     return response.json();
   }
   async function login() {
     if(API_BASE) {
       if(!$("token").value) throw new Error("Renseigne la clé d’accès du moteur HTTPS.");
-      return;
+      return request("/api/session");
     }
     return request("/api/login", {method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({token:$("token").value})});
@@ -431,10 +440,22 @@
   async function poll(id) {
     clearTimeout(pollTimer);
     try {
-      const job = await request("/api/jobs/" + id);
+      const job = await request("/api/jobs/" + encodeURIComponent(id));
+      pollFailures = 0;
       const p = job.status === "done" ? 1 : .50 + .50 * Math.max(0,job.progress);
       progress(p, stages[job.stage] || job.stage, job.status === "processing" ? "Traitement en cours sur le serveur…" : "");
-      if(job.status === "failed") throw new Error(job.error || "Erreur de rendu");
+      if(job.expires_at) {
+        const date = new Date(job.expires_at);
+        $("retention").textContent = "Fichiers conservés jusqu’au " + date.toLocaleString("fr-FR")
+          + " au plus tard. Télécharge le MP4 avant cette date.";
+      }
+      if(job.status === "failed") {
+        activeJob = id;
+        showError(new Error(job.error || "Échec du rendu."));
+        $("retryRender").style.display = "block";
+        return;
+      }
+      $("retryRender").style.display = "none";
       if(job.status === "done") {
         activeJob = id;
         button.disabled = false;
@@ -453,9 +474,20 @@
         return;
       }
       pollTimer = setTimeout(() => poll(id), 2500);
-    } catch(error) { showError(error); }
+    } catch(error) {
+      if([401, 403, 404].includes(error.status)) {
+        showError(error);
+        return;
+      }
+      pollFailures++;
+      progress(0.5, "Connexion temporairement interrompue",
+        "Le navigateur va reconnecter le suivi automatiquement. " + (error.message || ""));
+      pollTimer = setTimeout(() => poll(id), Math.min(30000, 2500 * 2 ** Math.min(pollFailures, 4)));
+    }
   }
   button.addEventListener("click",async()=>{
+    $("retryRender").style.display = "none";
+    $("retention").textContent = "";
     if(!selectedFiles.length) return showError(new Error("Sélectionne au moins une vidéo."));
     button.disabled = true;
     $("message").className = "muted";
@@ -491,6 +523,37 @@
       localStorage.removeItem("ongoingMontage");
       await poll(job.id);
     }catch(error){showError(error);}
+  });
+  $("retryRender").addEventListener("click",async()=>{
+    if(!activeJob) return;
+    $("retryRender").disabled = true;
+    try {
+      await login();
+      await request("/api/jobs/" + encodeURIComponent(activeJob) + "/retry", {method:"POST"});
+      $("retryRender").style.display = "none";
+      $("message").className = "muted";
+      await poll(activeJob);
+    } catch(error) {
+      showError(error);
+    } finally {
+      $("retryRender").disabled = false;
+    }
+  });
+  $("testBackend").addEventListener("click",async()=>{
+    $("backendStatus").textContent = "Vérification…";
+    try {
+      await login();
+      const info = await request("/api/session");
+      $("backendStatus").textContent =
+        "Moteur connecté · V" + info.version +
+        " · " + info.max_sources + " vidéos par montage · stockage disponible : " +
+        readableSize(info.free_disk_bytes) + " · exports conservés " +
+        info.result_ttl_days + " jours.";
+      $("backendStatus").style.color = "#cafa51";
+    } catch(error) {
+      $("backendStatus").textContent = "Connexion impossible : " + error.message;
+      $("backendStatus").style.color = "#ff9898";
+    }
   });
   $("copy").addEventListener("click",async()=>{
     await navigator.clipboard.writeText($("description").value);
