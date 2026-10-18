@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 from functools import lru_cache
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -71,8 +72,28 @@ def probe_media(source: Path) -> dict:
     duration = float(info.get("format", {}).get("duration") or video.get("duration") or 0)
     if not math.isfinite(duration) or duration < 0.5:
         raise ValueError("Durée vidéo invalide ou insuffisante.")
+    # Prefer camera capture metadata over upload time or Android filesystem times.
+    # Reject dates lacking a timezone: comparing local and UTC timestamps is unsafe.
+    tags = [video.get("tags") or {}, info.get("format", {}).get("tags") or {}]
+    captured = None
+    for collection in tags:
+        for key, value in collection.items():
+            if key.lower() not in {"creation_time", "com.apple.quicktime.creationdate",
+                                   "date", "com.android.capture.fps.creation_time"}:
+                continue
+            try:
+                raw_date = str(value).strip().replace("Z", "+00:00")
+                parsed = datetime.fromisoformat(raw_date)
+                if parsed.tzinfo is not None and 2000 <= parsed.year <= 2100:
+                    captured = parsed.astimezone(timezone.utc).isoformat()
+                    break
+            except (ValueError, TypeError, OverflowError):
+                continue
+        if captured:
+            break
     return {"duration": duration,
             "width": int(video["width"]), "height": int(video["height"]),
+            "captured_at": captured,
             "has_audio": any(s["codec_type"] == "audio" for s in info["streams"])}
 
 
