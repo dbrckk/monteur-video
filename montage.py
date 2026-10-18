@@ -72,6 +72,24 @@ def filter_catalog(theme: str) -> list[dict]:
              "recommended": key in suggested} for key in keys]
 
 
+def automatic_duration(durations: Sequence[float]) -> int:
+    """Choose a short-form target without padding or inventing missing footage."""
+    if not durations or any(not math.isfinite(d) or d < 1 for d in durations):
+        raise ValueError("Sources vidéo invalides")
+    available = sum(durations)
+    if available < 10:
+        return 10  # Final export naturally stops at available source duration.
+    if available < 20:
+        return 10 if available < 13 else 15
+    if available < 35:
+        return 15
+    if available < 70:
+        return 30
+    if available < 110:
+        return 45
+    return 60
+
+
 def allocation(durations: Sequence[float], requested: int) -> list[float]:
     """Fair duration split: every supplied rush gets at least one second."""
     if not durations or len(durations) > MAX_SOURCES:
@@ -114,11 +132,14 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         raise ValueError("Nombre de noms incohérent")
     # Inspect each file before any expensive rendering.
     info = [probe_media(Path(source)) for source in sources]
+    if target_seconds == 0:
+        target_seconds = automatic_duration([item["duration"] for item in info])
     budgets = allocation([item["duration"] for item in info], target_seconds)
     if len(sources) == 1:
         result = edit_video(Path(sources[0]), destination, theme=theme, aspect=aspect,
                             target_seconds=target_seconds, transcribe=transcribe,
                             size=size, progress=progress)
+        result["target_duration_seconds"] = target_seconds
         result["source_count"] = 1
         result["sources"] = [{
             "index": 0, "name": source_names[0] if source_names else Path(sources[0]).name,
@@ -167,6 +188,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
     output = social_metadata(theme, selected_speech, sum(x["duration"] for x in info))
     output.update({
         "aspect": aspect,
+        "target_duration_seconds": target_seconds,
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
         "sources": details,
