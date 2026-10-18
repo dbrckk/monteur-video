@@ -72,6 +72,8 @@ def grade_plan(samples_by_rush: Sequence[Sequence], theme: str = "fitness") -> d
     return {
         "method": "robust_per_rush_luminance_chroma",
         "target_luma": round(target_luma, 2),
+        "target_u": round(target_u, 2),
+        "target_v": round(target_v, 2),
         "source_grades": output,
         "bounded": True,
         "reference": "median_of_valid_sources",
@@ -112,8 +114,12 @@ def adaptive_shot_filters(samples: Sequence, clips: Sequence, theme: str,
         # Avoid trying to rescue crushed blacks and clipped skies with exposure.
         if local["luma"] < 45 or local["luma"] > 207:
             brightness = _clamp(brightness, -.025, .025)
-        u_delta = _clamp((global_stats["u"] - local["u"]) / 255 * .65, -.035, .035)
-        v_delta = _clamp((global_stats["v"] - local["v"]) / 255 * .65, -.035, .035)
+        # A shared across-rush white balance is essential. Blend 70% global
+        # reference with 30% of this rush's median to preserve lighting intent.
+        target_u = .70 * float(reference.get("target_u", global_stats["u"])) + .30 * global_stats["u"]
+        target_v = .70 * float(reference.get("target_v", global_stats["v"])) + .30 * global_stats["v"]
+        u_delta = _clamp((target_u - local["u"]) / 255 * .75, -.045, .045)
+        v_delta = _clamp((target_v - local["v"]) / 255 * .75, -.045, .045)
         outputs.append(
             f"eq=contrast={contrast:.3f}:brightness={brightness:.4f}:"
             f"saturation={saturation:.3f},"
