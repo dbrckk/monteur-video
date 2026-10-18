@@ -366,8 +366,8 @@
       filterList = data.filters;
       if(item.status === "done") {
         await useExport(id, preset);
-        $("filterStatus").textContent = "Filtre " + item.label + " appliqué. MP4 prêt à télécharger.";
         await loadFilters(id);
+        $("filterStatus").textContent = "Filtre " + item.label + " appliqué. MP4 prêt à télécharger.";
         return;
       }
       if(item.status === "failed") throw new Error(item.error || "Échec du filtre");
