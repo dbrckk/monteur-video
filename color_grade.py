@@ -22,7 +22,12 @@ def rush_color_stats(samples: Sequence) -> dict | None:
              and 30 <= x.luminance <= 224 and x.detail >= 2]
     if len(valid) < 3:
         return None
+    # A [0,255] interval is the backwards-compatible "not measured" sentinel.
+    measured = [x for x in valid if 0 <= x.luma_low <= x.luma_high <= 255
+                and (x.luma_low > 0 or x.luma_high < 255)]
     return {
+        "low": median(x.luma_low for x in measured) if measured else None,
+        "high": median(x.luma_high for x in measured) if measured else None,
         "luma": median(x.luminance for x in valid),
         "u": median(x.chroma_u for x in valid),
         "v": median(x.chroma_v for x in valid),
@@ -57,6 +62,12 @@ def grade_plan(samples_by_rush: Sequence[Sequence], theme: str = "fitness") -> d
             continue
         # FFmpeg eq brightness uses a roughly normalized [-1,+1] offset.
         bright = _clamp((target_luma - item["luma"]) / 255, -0.048, 0.048)
+        # Percentile-based headroom prevents pushing already clipped whites
+        # higher or crushing shadow detail in backlit phone recordings.
+        if item["high"] is not None and item["high"] >= 236:
+            bright = min(bright, 0.0)
+        if item["low"] is not None and item["low"] <= 14:
+            bright = max(bright, 0.0)
         red = _clamp((target_v - item["v"]) / 255 * 0.9, -0.05, 0.05)
         blue = _clamp((target_u - item["u"]) / 255 * 0.9, -0.05, 0.05)
         vf = (f"eq=contrast={contrast:.3f}:brightness={bright:.4f}:"
@@ -111,6 +122,12 @@ def adaptive_shot_filters(samples: Sequence, clips: Sequence, theme: str,
         # Mix global and shot-specific exposure to avoid flicker and oscillation.
         local_target = .72 * target + .28 * global_stats["luma"]
         brightness = _clamp((local_target - local["luma"]) / 255, -.065, .065)
+        # Local highlight/shadow protection, even when the rush average
+        # exposure is deceptively normal.
+        if local["high"] is not None and local["high"] >= 236:
+            brightness = min(brightness, 0.0)
+        if local["low"] is not None and local["low"] <= 14:
+            brightness = max(brightness, 0.0)
         # Avoid trying to rescue crushed blacks and clipped skies with exposure.
         if local["luma"] < 45 or local["luma"] > 207:
             brightness = _clamp(brightness, -.025, .025)
