@@ -70,13 +70,13 @@ def _read_luma_bounds(path: Path) -> dict[float, tuple[float, float]]:
         if time is not None and low is not None and high is not None:
             result[time] = (low, high)
     for line in path.read_text(encoding="utf-8").splitlines():
-        found = re.search(r"pts_time:([0-9]+(?:\\.[0-9]+)?)", line)
+        found = re.search(r"pts_time:([0-9]+(?:\.[0-9]+)?)", line)
         if found:
             save()
             time = round(float(found.group(1)), 2)
             low = high = None
-        found_low = re.search(r"lavfi\\.signalstats\\.YLOW=([0-9]+(?:\\.[0-9]+)?)", line)
-        found_high = re.search(r"lavfi\\.signalstats\\.YHIGH=([0-9]+(?:\\.[0-9]+)?)", line)
+        found_low = re.search(r"lavfi\.signalstats\.YLOW=([0-9]+(?:\.[0-9]+)?)", line)
+        found_high = re.search(r"lavfi\.signalstats\.YHIGH=([0-9]+(?:\.[0-9]+)?)", line)
         if found_low:
             low = float(found_low.group(1))
         if found_high:
