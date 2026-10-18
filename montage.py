@@ -198,7 +198,8 @@ def chronological_order(sources: Sequence[Path], samples: Sequence[list],
     if len(sources) != len(info) or len(sources) != len(samples):
         raise ValueError("Métadonnées chronologiques incohérentes")
     timestamps = [item.get("captured_at") for item in info]
-    if timestamps and all(isinstance(x, str) and x for x in timestamps):
+    if timestamps and len(set(timestamps)) > 1 and all(
+            isinstance(x, str) and x for x in timestamps):
         return sorted(range(len(sources)),
                       key=lambda i: (timestamps[i], _content_fingerprint(sources[i]))), "capture_time"
     return narrative_order(sources, samples), "energy_arc_no_reliable_timestamps"
