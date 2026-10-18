@@ -348,15 +348,19 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
         progress(0.32, "silence")
     silences = detect_silences(source, info["duration"], info["has_audio"])
     clips = plan_clips(info["duration"], scenes, silences, transcript, target_seconds)
-    metadata = social_metadata(theme, transcript, info["duration"])
+    # Publication text must describe what survived editing, not unseen source footage.
+    selected_speech = [phrase for phrase in transcript
+                       if any(phrase["start"] < clip.end and phrase["end"] > clip.start
+                              for clip in clips)]
+    metadata = social_metadata(theme, selected_speech, info["duration"])
     metadata.update({"aspect": aspect, "resolution": ("9:16" if aspect == "vertical" else "16:9"),
-                     "speech_engine": asr_mode, "captions_generated": bool(transcript),
+                     "speech_engine": asr_mode, "captions_generated": bool(selected_speech),
                      "scene_count": len(scenes),
                      "clips": [{"start": c.start, "end": c.end, "score": round(c.score, 2)}
                                for c in clips]})
     if progress:
         progress(0.40, "render")
-    render(source, destination, clips, metadata, transcript,
+    render(source, destination, clips, metadata, selected_speech,
            aspect == "vertical", info["has_audio"], size, progress)
     if progress:
         progress(1.0, "done")
