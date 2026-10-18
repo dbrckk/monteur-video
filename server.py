@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from editor import THEMES, edit_video
 from montage import MAX_SOURCES, FILTER_PRESETS, edit_many, filter_catalog, apply_filter
+from soundtrack import SOUND_LEVELS, add_soundtrack
 
 ROOT = Path(os.environ.get("EDITOR_DATA_DIR", "./data")).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -179,6 +180,7 @@ class ExportRequest(BaseModel):
     theme: str = "fitness"
     aspect: str = "vertical"
     seconds: int = Field(default=0, ge=0, le=180)
+    sound_mode: str = "auto"
 
 
 class MontageRequest(ExportRequest):
@@ -272,6 +274,7 @@ def run_job(ident: str) -> None:
         update_job(ident, status="processing", stage="probe", progress=0.01)
         progress = lambda value, stage: update_job(
             ident, progress=round(value, 3), stage=stage)
+        video_progress = lambda value, stage: progress(min(0.93, value * 0.92), stage)
         if "sources" in settings:
             sources = [str(uuid.UUID(src)) for src in settings["sources"]]
             with database() as con:
@@ -286,13 +289,19 @@ def run_job(ident: str) -> None:
                 theme=settings["theme"], aspect=settings["aspect"],
                 target_seconds=settings["seconds"],
                 source_names=[names[src] for src in sources],
-                size=render_size, progress=progress,
+                size=render_size, progress=video_progress,
             )
         else:
             result = edit_video(source_path(ident), folder / "final.mp4",
                                 theme=settings["theme"], aspect=settings["aspect"],
                                 target_seconds=settings["seconds"],
-                                size=render_size, progress=progress)
+                                size=render_size, progress=video_progress)
+        music = add_soundtrack(folder / "final.mp4", settings["theme"],
+                               sound_mode=settings.get("sound_mode", "auto"),
+                               voice_present=bool(result.get("selected_transcript")),
+                               music_profile=result.get("music_profile"),
+                               progress=lambda p, stage: progress(0.93 + p * 0.065, stage))
+        result["soundtrack"] = music
         (folder / "metadata.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         # Delete only temporary re-encoded segments: raw source remains for re-use.
@@ -459,8 +468,8 @@ async def append_chunk(ident: str, request: Request):
 @app.post("/api/uploads/{ident}/complete", dependencies=[Depends(authorize)])
 def complete_upload(ident: str, data: ExportRequest):
     job = get_job(ident)
-    if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"}:
-        raise HTTPException(status_code=422, detail="Configuration inconnue")
+    if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"} or data.sound_mode not in SOUND_LEVELS:
+        raise HTTPException(status_code=422, detail="Configuration audio ou vidéo inconnue")
     # Prevent two clients finishing the same upload simultaneously.
     with database() as con:
         con.execute("BEGIN IMMEDIATE")
@@ -486,7 +495,7 @@ def create_montage(data: MontageRequest):
     An optional client-generated UUID makes retry safe if a mobile connection
     drops after the server has already accepted the creation request.
     """
-    if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"}:
+    if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"} or data.sound_mode not in SOUND_LEVELS:
         raise HTTPException(status_code=422, detail="Paramètres de montage inconnus")
     try:
         ids = [str(uuid.UUID(item)) for item in data.upload_ids]
@@ -498,7 +507,7 @@ def create_montage(data: MontageRequest):
     if ident in ids:
         raise HTTPException(status_code=422, detail="Identifiant de montage en conflit")
     settings = {"theme": data.theme, "aspect": data.aspect,
-                "seconds": data.seconds, "sources": ids}
+                "seconds": data.seconds, "sound_mode": data.sound_mode, "sources": ids}
     with database() as con:
         con.execute("BEGIN IMMEDIATE")
         existing = con.execute("SELECT * FROM jobs WHERE id=?", (ident,)).fetchone()
@@ -550,6 +559,7 @@ def job_status(ident: str):
         expires_at = (stamp + timedelta(days=RESULT_TTL_DAYS)).isoformat()
     return {"id": data["id"], "filename": data["filename"],
             "status": data["status"], "stage": data["stage"],
+            "created_at": data["created_at"], "updated_at": data["updated_at"],
             "progress": data["progress"], "error": data["error"],
             "expires_at": expires_at,
             "metadata": json.loads(data["metadata"]) if data["metadata"] else None}

@@ -84,12 +84,14 @@ class MultiRenderTests(unittest.TestCase):
             self.assertEqual(self.dimensions(original), "360,640")
             self.assertEqual(meta["source_count"], 2)
             self.assertEqual(len(meta["sources"]), 2)
-            self.assertEqual([x["source_index"] for x in meta["clips"] if "source_index" in x],
-                             sorted(x["source_index"] for x in meta["clips"]))
+            self.assertEqual(set(x["source_index"] for x in meta["clips"]), {0, 1})
+            self.assertEqual(sorted(meta["sequence_order"]), [0, 1])
+            self.assertEqual(meta["sequence_strategy"], "energy_arc")
             self.assertGreater(meta["rendered_duration_seconds"], 4.0)
             self.assertLessEqual(meta["rendered_duration_seconds"], 7.0)
             self.assertNotIn("squat", meta["hashtags"])
-            self.assertEqual(meta["sources"][1]["name"], "gym-night.mp4")
+            self.assertEqual({x["name"] for x in meta["sources"]},
+                             {"gym-morning.mp4", "gym-night.mp4"})
             # No-audio rush must still be muxed with AAC for normalized concat.
             stream = subprocess.check_output([
                 "ffprobe", "-v", "error", "-select_streams", "a:0",

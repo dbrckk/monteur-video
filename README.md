@@ -2,21 +2,53 @@
 
 Application web **mobile-first** avec moteur local ou distant sécurisé, construite pour produire de vrais montages à partir de longues vidéos, et non de démonstrations synthétiques. Importation de **1 à 10 vidéos pour un seul montage**, reprenable par blocs de 8 Mio, analyse FFmpeg des scènes et silences, transcription facultative via faster-whisper, assemblage des clips issus de chaque rush, incrustation de sous-titres, filtres colorimétriques sélectionnables **après le premier rendu**, export **9:16 (Instagram/Reels/Shorts)** ou **16:9 (YouTube)** en H.264/AAC, description française et hashtags.
 
-**État : V1 fonctionnelle et validée en tests, sous réserve de disposer d'un ordinateur hébergeant le moteur.** Ce moteur n'est pas encore un éditeur haut de gamme entièrement automatique. Le recadrage est centré et non intelligent ; la sélection des moments forts repose sur des heuristiques, et aucune musique ou effet visuel tiers n'est injecté sans droits. Les fonctions sont soumises à une CI qui tente un véritable encodage des deux formats.
+**État : V1 disponible gratuitement sur moteur HD hébergé, mais avec stockage éphémère ; un hébergement personnel offre davantage de contrôle.** Ce moteur n'est pas encore un éditeur haut de gamme entièrement automatique. Le recadrage est centré et non intelligent ; la sélection des moments forts repose sur des heuristiques, et aucune musique ou effet visuel tiers n'est injecté sans droits. Les fonctions sont soumises à une CI qui tente un véritable encodage des deux formats.
 
-## Bêta HTTPS Render (2026-10-18)
+## Moteur HD gratuit stable (2026-10-18)
 
-Une instance gratuite de démonstration a été créée : **https://monteur-video-beta.onrender.com**. L'interface statique GitHub Pages utilise désormais cette adresse par défaut ; la clé d'accès n'est **pas** intégrée au code et doit être renseignée par l'utilisateur. Le mode démonstration `MONTEUR_PUBLIC_DEMO=1` est accessible sans clé ; il limite les créations simultanées et vérifie les origines navigateur autorisées. La vérification de l'origine n'est pas une authentification et ne protège pas contre les clients qui falsifient cet en-tête. Pour un serveur privé, conserver `APP_API_TOKEN`.
+L'interface publique [Monteur Studio](https://dbrckk.github.io/monteur-video/) utilise **https://monteur-video-stable.onrender.com**, sans clé d'accès à saisir. Ce service Render Free est fixé à la branche GitHub `release/hd-stable`, avec **déploiement automatique désactivé** : les changements de `main` ne provoquent plus l'arrêt d'un montage en cours. Les mises à jour du moteur doivent être validées et déployées séparément, de préférence hors traitement actif.
 
-Configuration gratuite de précaution : `MONTEUR_RENDER_SIZE=720` (720×1280 HD pour Reels), `MAX_UPLOAD_GB=0.35` par fichier, `UPLOAD_TTL_HOURS=6`, `RESULT_TTL_DAYS=1`. Les fonctionnalités d'édition (1–10 sources, filtres et export) sont identiques mais les vidéos longues/volumineuses et les gros projets peuvent dépasser les ressources gratuites.
+- Export **HD 720p uniquement** : 720×1280 (vertical) ou 1280×720 (horizontal).
+- Jusqu'à **10 vidéos par montage**, import séquentiel reprenable ; **350 Mio environ par fichier** sur ce serveur, selon l'espace réellement disponible.
+- Durée automatique ou cible de **10 à 180 secondes**, filtres et MP4 H.264/AAC.
+- Aucune clé demandée à l'utilisateur sur la démonstration publique ; les moteurs privés conservent l'authentification.
+- Le navigateur relance un transfert dont la session a disparu après un redémarrage ; si un montage retourne 404, il tente une nouvelle importation **une seule fois** tant que les fichiers sont encore sélectionnés. Après fermeture/rechargement de la page, il faut parfois sélectionner à nouveau les originaux.
+- **Important : le disque Render Free reste éphémère**, même avec ce déploiement stable. La mise en veille, un incident ou un redémarrage peuvent toujours faire disparaître les sources, les projets et les MP4 avant leur durée indicative d'expiration. **Cela ne remplace pas un stockage persistant**. Conserver les vidéos d'origine sur le téléphone et télécharger le résultat dès qu'il est disponible.
 
-**Avertissement :** Render Free peut mettre l'instance en veille et effacer les fichiers du disque éphémère lors d'un redémarrage ou déploiement. Aucun stockage persistant n'est configuré. Ne pas utiliser pour des rushs irremplaçables ; conserver les originaux sur le téléphone. La transcription Whisper est désactivée dans cette image allégée, mais les montages FFmpeg et les filtres fonctionnent. Cette bêta n'est pas une garantie de stabilité pour des vidéos de plusieurs heures.
+Les anciennes instances `monteur-video-beta` et `monteur-video-hd` ne sont plus les points d'accès par défaut. La transcription Whisper est désactivée sur le moteur gratuit allégé ; aucune transcription/sous-titre n'est inventé lorsque ce module est absent.
+
+## Montage automatique cohérent et suivi de progression
+
+Le moteur compose désormais une **progression visuelle indépendante de l'ordre d'importation** : plan d'ouverture relativement calme, effort croissant, moment fort, conclusion plus posée. Le classement repose sur le mouvement et le niveau de détail des images échantillonnées, avec un départage déterministe par contenu. Il ne reconnaît pas encore les exercices, les personnes, les émotions ou la chronologie réelle des événements ; les rushs ambigus peuvent donc nécessiter une sélection manuelle dans une version ultérieure.
+
+Les longs rushs sont analysés sur des fenêtres réparties sur toute leur durée, avec recherche FFmpeg bornée (24 secondes échantillonnées par rush par défaut, `MONTEUR_ANALYSIS_SECONDS` configurable). Cela réduit les décodages exhaustifs sur hébergement gratuit. Les progressions `probe`, `scenes`, `quality`, `story` et `render` correspondent désormais à des étapes réelles. L'analyse des silences audio, inutilisée pour décider quels mouvements sportifs conserver, n'est plus effectuée.
+
+L'encodage est limité en threads et les sous-clips ont de légers fondus audio aux points de coupe, sans musique externe ajoutée. Chaque sous-processus FFmpeg critique dispose d'une limite de temps ; un échec explicite est préférable à un montage bloqué indéfiniment. Comme les images ne sont échantillonnées qu'à intervalles pour économiser le CPU, le meilleur mouvement d'un rush très long peut encore passer entre deux fenêtres.
+
+## Bande-son originale, rythme sportif et audio des rushs
+
+Le serveur génère localement une **musique instrumentale originale** selon le thème et l'ajoute au master MP4 final : **Power Session** (fitness, 144 BPM), **Sprint Mode** (sport, 152 BPM), **Rise Again** (motivation, 128 BPM), **Daylight Motion** (lifestyle, 116 BPM), **Momentum** (auto, 136 BPM). Batterie synthétique, basse, motif mélodique et variations de mesures sont calculés par `soundtrack.py`, sans télécharger ni réutiliser de morceaux commerciaux, d'échantillons tiers ni de musiques issues de TikTok/Instagram.
+
+Sur smartphone, le son du fichier source est réglable :
+- **Auto** (par défaut) : son des rushs **coupé**, sauf si une vraie transcription a identifié de la parole dans le montage, auquel cas le son d'origine est à **20 %**.
+- **Couper** : son d'origine à **0 %**.
+- **20 %** : conserver légèrement la voix et les bruits de la séance en fond de musique.
+
+Les clips de sport et musculation sont réduits à des phrases de **8 temps environ**, avec une préférence pour les durées multiples de **4 temps** et des coupes franches calées sur le tempo du morceau généré. La musique reste continue pendant tout le montage, même si les rushs changent d'ordre, et les coupes audio sources bénéficient de fondus très courts.
+
+Ces instrumentaux originaux fournissent une solution utilisable gratuitement et sans clé, mais ne prétendent pas être des musiques populaires sous licence TikTok ni un catalogue professionnel produit par des artistes. Sans Whisper, l'option automatique ne peut pas déterminer si la voix est intéressante : elle privilégie donc la musique seule. Les métadonnées d'export indiquent la musique, le BPM, sa provenance et le niveau de son source réellement utilisé.
+
+### Sélection musicale directement adaptée aux images (V2)
+
+La V2 analyse les signaux vidéo FFmpeg déjà calculés (intensité des mouvements, qualité/luminosité et fréquence de changement des plans), puis choisit une **direction musicale distincte pour chaque montage** : échauffement posé, entraînement régulier ou action intense. Par exemple, le même thème fitness peut aboutir à **120, 136 ou 154 BPM**. La piste originale est ensuite générée à ce tempo, et les séquences sportives utilisent le même tempo pour choisir des durées de coupe sur les mesures. L'analyse agrégée sur plusieurs rushs ne dépend pas de leur ordre d'import.
+
+Cette fonction s'inspire du **principe d'appariement entre musique et vidéo**, mais ne reproduit ni le catalogue TikTok, ni son moteur de recommandation propriétaire, ni des morceaux d'artistes non licenciés. La détection reste fondée sur des heuristiques visuelles, sans classification sémantique des exercices ni analyse des goûts personnels. Si les images sont trop sombres ou les signaux insuffisants, le thème fournit un choix musical de secours.
 
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.
 
-**Important :** les deux hébergeurs statiques ne traitent pas les vidéos. Le moteur FFmpeg se lance maintenant gratuitement sur votre PC avec un tunnel HTTPS et une clé secrète créée automatiquement. Il faut garder cet ordinateur allumé pendant le traitement.
+**Important :** les deux hébergeurs statiques ne traitent pas les vidéos. Le moteur FFmpeg est disponible sur Render Free sans clé pour un usage d'essai. Un PC personnel avec tunnel HTTPS reste une alternative pour des fichiers plus volumineux ou un traitement privé.
 
 
 
@@ -24,7 +56,7 @@ L'interface statique est **déjà publiée sur https://dbrckk.github.io/monteur-
 
 **Parcours smartphone :** sélectionner simultanément jusqu'à 10 vidéos dans la galerie Android, les envoyer une à une par blocs reprenables, puis produire **un seul MP4** incluant des moments de chaque rush. Laisser l'onglet ouvert durant l'envoi ; le traitement continue côté serveur après fermeture. Lorsque le montage est disponible, choisir parmi les filtres recommandés selon le thème (fitness, motivation, sport, lifestyle), appliquer celui souhaité sans perdre le master original, puis télécharger la version choisie sur le téléphone.
 
-L'interface seule ne peut pas produire le montage : il faut connecter par HTTPS un serveur personnel qui exécute FFmpeg et Whisper. Les requêtes depuis GitHub Pages sont autorisées par CORS explicite et nécessitent `APP_API_TOKEN` dans l'en-tête Authorization. Les téléchargements passent par un lien temporaire signé ; la clé API n'apparaît pas dans l'URL.
+L'interface seule ne peut pas encoder : elle utilise le serveur FFmpeg HD préconfiguré, ou un moteur personnel. Le moteur public fonctionne sans clé ; le mode privé exige `APP_API_TOKEN` dans l'en-tête Authorization. Les téléchargements passent par un lien temporaire signé ; la clé API n'apparaît pas dans l'URL.
 
 **[Guide de démarrage V1 Android + moteur gratuit en HTTPS](docs/REMOTE_ANDROID.md)** : une commande Linux/macOS ou Windows, clé API générée, Cloudflare Quick Tunnel temporaire. En option, Tailscale Funnel permet de conserver une adresse HTTPS stable avec un compte Personal gratuit. **[Documentation technique de l'hébergement statique](docs/STATIC_HOSTING.md)**.
 

@@ -9,8 +9,9 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
-from editor import execute
+from editor import analysis_windows, execute, probe_media
 
 
 @dataclass(frozen=True)
@@ -34,13 +35,17 @@ def _read_metrics(path: Path) -> dict[float, float]:
     return values
 
 
-def analyze_visual(source: Path) -> list[VisualSample]:
-    """Return sampled visual indicators; safely degrade if analysis fails.
+def analyze_visual(source: Path, duration: float | None = None,
+                   progress: Callable[[float], None] | None = None) -> list[VisualSample]:
+    """Inspect representative windows rather than exhaustively decoding long footage.
 
-    Scores are not biometric, object-detection, or action-classification signals.
-    No frame images or source footage are retained by this analyzer.
+    Return actual source-relative timestamps so highlights can span the full rush.
+    A broken sampled interval does not prevent the other intervals from being used.
     """
     try:
+        duration = float(duration if duration is not None else probe_media(source)["duration"])
+        windows = analysis_windows(duration)
+        collected: list[VisualSample] = []
         with tempfile.TemporaryDirectory(prefix="monteur-visual-") as temporary:
             folder = Path(temporary)
             paths = {key: folder / (key + ".txt")
@@ -51,17 +56,29 @@ def analyze_visual(source: Path) -> list[VisualSample]:
                 f"[m]tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file={paths['motion']}[mo];"
                 f"[e]sobel,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file={paths['detail']}[eo]"
             )
-            execute(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error",
-                     "-filter_complex_threads", "1", "-i", str(source),
-                     "-filter_complex", graph, "-map", "[lo]", "-map", "[mo]",
-                     "-map", "[eo]", "-an", "-f", "null", "-"])
-            light = _read_metrics(paths["light"])
-            motion = _read_metrics(paths["motion"])
-            detail = _read_metrics(paths["detail"])
-            return [VisualSample(t, light[t], motion.get(t, 0.0), detail.get(t, 0.0))
-                    for t in sorted(light)]
+            for i, (start, length) in enumerate(windows):
+                try:
+                    for path in paths.values():
+                        path.unlink(missing_ok=True)
+                    execute(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error",
+                             "-filter_complex_threads", "1", "-ss", str(start),
+                             "-i", str(source), "-t", str(length),
+                             "-filter_complex", graph, "-map", "[lo]", "-map", "[mo]",
+                             "-map", "[eo]", "-an", "-f", "null", "-"], timeout=90)
+                    light = _read_metrics(paths["light"])
+                    motion = _read_metrics(paths["motion"])
+                    detail = _read_metrics(paths["detail"])
+                    collected.extend(
+                        VisualSample(round(start + t, 2), light[t],
+                                     motion.get(t, 0.0), detail.get(t, 0.0))
+                        for t in sorted(light)
+                    )
+                except (OSError, RuntimeError, ValueError):
+                    pass
+                if progress:
+                    progress((i + 1) / len(windows))
+        return collected
     except (OSError, RuntimeError, ValueError):
-        # A quality heuristic must never prevent an otherwise valid video render.
         return []
 
 
@@ -99,19 +116,27 @@ def usable_ranges(samples: list[VisualSample], duration: float) -> list[tuple[fl
                 visible_frames[k] = False
         i = j
     start: float | None = None
-    last = 0.0
+    last: float | None = None
     for sample, visible in zip(samples, visible_frames):
+        # Sparse window sampling must not mark unseen minutes as verified footage.
+        if start is not None and last is not None and sample.time - last > 1.5:
+            end = min(duration, last + 0.5)
+            if end - start >= 1:
+                intervals.append((start, end))
+            start = None
         if visible:
             if start is None:
                 start = sample.time
             last = sample.time
-        elif start is not None:
-            end = min(duration, sample.time)
-            if end - start >= 1:
-                intervals.append((start, end))
-            start = None
-    if start is not None:
-        end = min(duration, max(last + 0.5, duration if duration - last < 1.0 else last + 0.5))
+        else:
+            if start is not None:
+                end = min(duration, sample.time)
+                if end - start >= 1:
+                    intervals.append((start, end))
+                start = None
+            last = sample.time
+    if start is not None and last is not None:
+        end = min(duration, last + 0.5)
         if end - start >= 1:
             intervals.append((start, end))
     return intervals
