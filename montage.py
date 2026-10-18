@@ -197,7 +197,7 @@ def _filename_capture_time(name: str) -> str | None:
     filename-derived convention. Do not mix these with UTC camera tags.
     """
     name = Path(name).name
-    match = re.search(r"(?:^|[_-])(?:VID|PXL|IMG|MVIMG)[_-]?(20\\d{2})([01]\\d)([0-3]\\d)[_-]([0-2]\\d)([0-5]\\d)([0-5]\\d)(?:[_\\.-]|$)",
+    match = re.search(r"(?:^|[_-])(?:VID|PXL|IMG|MVIMG)[_-]?(20\d{2})([01]\d)([0-3]\d)[_-]([0-2]\d)([0-5]\d)([0-5]\d)(?:[_\.-]|$)",
                       name, re.I)
     if not match:
         return None
