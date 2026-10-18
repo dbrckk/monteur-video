@@ -595,7 +595,7 @@
     try { saved = JSON.parse(localStorage.getItem("lastJob") || "null"); }
     catch { saved = {id:localStorage.getItem("lastJob"),origin:""}; }
     if(!saved?.id || saved.origin !== API_BASE) return showError(new Error("Montage introuvable sur ce moteur."));
-    if(API_BASE && !$("token").value) return showError(new Error("Renseigne ta clé d’accès pour reprendre le suivi."));
+    if(API_BASE && !API_BASE.includes("monteur-video-hd.onrender.com") && !$("token").value) return showError(new Error("Renseigne ta clé d’accès pour reprendre le suivi."));
     poll(saved.id);
   });
   if("serviceWorker" in navigator && location.protocol === "https:") {
