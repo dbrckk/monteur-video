@@ -22,6 +22,8 @@ class VisualSample:
     detail: float
     chroma_u: float = 128.0
     chroma_v: float = 128.0
+    luma_low: float = 0.0
+    luma_high: float = 255.0
 
 
 def _read_metrics(path: Path) -> dict[float, float]:
@@ -59,6 +61,30 @@ def _read_chroma(path: Path) -> dict[float, tuple[float, float]]:
     return values
 
 
+def _read_luma_bounds(path: Path) -> dict[float, tuple[float, float]]:
+    """Capture YLOW/YHIGH percentiles, not just average exposure."""
+    result: dict[float, tuple[float, float]] = {}
+    time = None
+    low = high = None
+    def save():
+        if time is not None and low is not None and high is not None:
+            result[time] = (low, high)
+    for line in path.read_text(encoding="utf-8").splitlines():
+        found = re.search(r"pts_time:([0-9]+(?:\\.[0-9]+)?)", line)
+        if found:
+            save()
+            time = round(float(found.group(1)), 2)
+            low = high = None
+        found_low = re.search(r"lavfi\\.signalstats\\.YLOW=([0-9]+(?:\\.[0-9]+)?)", line)
+        found_high = re.search(r"lavfi\\.signalstats\\.YHIGH=([0-9]+(?:\\.[0-9]+)?)", line)
+        if found_low:
+            low = float(found_low.group(1))
+        if found_high:
+            high = float(found_high.group(1))
+    save()
+    return result
+
+
 def analyze_visual(source: Path, duration: float | None = None,
                    progress: Callable[[float], None] | None = None) -> list[VisualSample]:
     """Inspect representative windows rather than exhaustively decoding long footage.
@@ -91,12 +117,14 @@ def analyze_visual(source: Path, duration: float | None = None,
                              "-map", "[eo]", "-an", "-f", "null", "-"], timeout=90)
                     light = _read_metrics(paths["light"])
                     chroma = _read_chroma(paths["light"])
+                    bounds = _read_luma_bounds(paths["light"])
                     motion = _read_metrics(paths["motion"])
                     detail = _read_metrics(paths["detail"])
                     collected.extend(
                         VisualSample(round(start + t, 2), light[t],
                                      motion.get(t, 0.0), detail.get(t, 0.0),
-                                     *chroma.get(t, (128.0, 128.0)))
+                                     *chroma.get(t, (128.0, 128.0)),
+                                     *bounds.get(t, (0.0, 255.0)))
                         for t in sorted(light)
                     )
                 except (OSError, RuntimeError, ValueError):
