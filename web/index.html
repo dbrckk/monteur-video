@@ -134,9 +134,9 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const DEFAULT_BACKEND = ["localhost", "127.0.0.1"].includes(location.hostname) ? "" : "https://monteur-video-hd.onrender.com";
+  const DEFAULT_BACKEND = ["localhost", "127.0.0.1"].includes(location.hostname) ? "" : "https://monteur-video-stable.onrender.com";
   const previousBackend = (localStorage.getItem("backendUrl") || "").replace(/\/$/, "");
-  if(previousBackend === "https://monteur-video-beta.onrender.com") localStorage.removeItem("backendUrl");
+  if(["https://monteur-video-beta.onrender.com", "https://monteur-video-hd.onrender.com"].includes(previousBackend)) localStorage.removeItem("backendUrl");
   // Locally hosted installations and CI always use their own same-origin API.
   const LOCAL_HOST = ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
   const API_BASE = (localStorage.getItem("backendUrl") || (LOCAL_HOST ? "" : DEFAULT_BACKEND)).replace(/\/$/, "");
@@ -181,7 +181,7 @@
   }
   async function login() {
     if(API_BASE) {
-      if(!$("token").value && !API_BASE.includes("monteur-video-hd.onrender.com")) throw new Error("Renseigne la clé d’accès du moteur HTTPS.");
+      if(!$("token").value && !API_BASE.includes("monteur-video-stable.onrender.com")) throw new Error("Renseigne la clé d’accès du moteur HTTPS.");
       return request("/api/session");
     }
     return request("/api/login", {method:"POST",headers:{"Content-Type":"application/json"},
@@ -642,7 +642,7 @@
     setTimeout(()=>$("copy").textContent="Copier",1800);
   });
   $("backend").value = API_BASE;
-  if(API_BASE && !API_BASE.includes("monteur-video-hd.onrender.com")) { $("token").hidden = false; $("tokenLabel").hidden = false; }
+  if(API_BASE && !API_BASE.includes("monteur-video-stable.onrender.com")) { $("token").hidden = false; $("tokenLabel").hidden = false; }
   $("saveBackend").addEventListener("click",()=>{
     const v = $("backend").value.trim().replace(/\/$/,"");
     if(v && !/^https:\/\/[^/]+$/.test(v)) return showError(new Error("Adresse HTTPS invalide"));
@@ -661,7 +661,7 @@
     try { saved = JSON.parse(localStorage.getItem("lastJob") || "null"); }
     catch { saved = {id:localStorage.getItem("lastJob"),origin:""}; }
     if(!saved?.id || saved.origin !== API_BASE) return showError(new Error("Montage introuvable sur ce moteur."));
-    if(API_BASE && !API_BASE.includes("monteur-video-hd.onrender.com") && !$("token").value) return showError(new Error("Renseigne ta clé d’accès pour reprendre le suivi."));
+    if(API_BASE && !API_BASE.includes("monteur-video-stable.onrender.com") && !$("token").value) return showError(new Error("Renseigne ta clé d’accès pour reprendre le suivi."));
     poll(saved.id);
   });
   if("serviceWorker" in navigator && location.protocol === "https:") {
