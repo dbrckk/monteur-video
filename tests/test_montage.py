@@ -107,6 +107,21 @@ class MultiRenderTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 apply_filter(original, root / "bad.mp4", "not-a-filter")
 
+    def test_every_theme_filter_encodes_correctly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "short.mp4"
+            self.create_clip(source, "orange", True)
+            for preset in FILTER_PRESETS:
+                if preset == "original":
+                    continue
+                with self.subTest(preset=preset):
+                    destination = root / f"{preset}.mp4"
+                    apply_filter(source, destination, preset)
+                    self.assertTrue(destination.exists())
+                    self.assertGreater(destination.stat().st_size, 500)
+                    self.assertEqual(self.dimensions(destination), "160,90")
+
     def test_horizontal_multi_rush_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
