@@ -1,0 +1,48 @@
+name: V1 Android browser-to-FFmpeg smoke
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'server.py'
+      - 'editor.py'
+      - 'montage.py'
+      - 'qa/**'
+      - '.github/workflows/browser-smoke.yml'
+  workflow_dispatch:
+jobs:
+  android-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install FFmpeg, FastAPI and real Chromium
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt playwright
+          python -m playwright install --with-deps chromium
+      - name: Start the actual video editing API
+        run: |
+          mkdir -p "$RUNNER_TEMP/monteur-browser-data"
+          EDITOR_DATA_DIR="$RUNNER_TEMP/monteur-browser-data" \
+            APP_API_TOKEN='' uvicorn server:app --host 127.0.0.1 --port 8000 \
+            > /tmp/monteur-browser-server.log 2>&1 &
+          echo $! > /tmp/monteur-browser-server.pid
+          for _ in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8000/api/health; then exit 0; fi
+            sleep 2
+          done
+          echo "API did not start"; cat /tmp/monteur-browser-server.log; exit 1
+      - name: Real Android-sized UI with two videos and a filtered MP4 download
+        run: python qa/mobile_browser_smoke.py
+      - name: Server logs
+        if: always()
+        run: |
+          tail -120 /tmp/monteur-browser-server.log || true
+          if test -f /tmp/monteur-browser-server.pid; then
+            kill "$(cat /tmp/monteur-browser-server.pid)" || true
+          fi
