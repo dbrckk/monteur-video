@@ -360,13 +360,18 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
                    "-ss", str(clip.start), "-i", str(source)]
         if not has_audio:
             command += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+        # Brief fade at every cut limits audible clicks in mixed microphone /
+        # background-audio rushes without adding unlicensed music.
+        audio_fade = (f"afade=t=in:st=0:d=0.06,"
+                      f"afade=t=out:st={max(0.06, clip.duration - 0.08):.3f}:d=0.08")
         command += ["-t", str(clip.duration), "-map", "0:v:0",
                     "-map", "0:a:0" if has_audio else "1:a:0",
-                    "-vf", scaling, "-r", "30", "-c:v", "libx264",
-                    "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2",
+                    "-vf", scaling, "-af", audio_fade, "-r", "30", "-c:v", "libx264",
+                    "-threads", "2", "-preset", "veryfast", "-crf", "20",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+                    "-ar", "48000", "-ac", "2",
                     "-map_metadata", "-1", "-shortest", str(part)]
-        execute(command)
+        execute(command, timeout=600)
         files.append(part)
         if progress:
             progress(0.40 + (i + 1) / len(clips) * 0.52, "render")
@@ -374,7 +379,7 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
     concat.write_text("".join(f"file '{p.name}'\n" for p in files), encoding="utf-8")
     execute(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
              "-f", "concat", "-safe", "0", "-i", str(concat),
-             "-c", "copy", "-movflags", "+faststart", str(destination)])
+             "-c", "copy", "-movflags", "+faststart", str(destination)], timeout=180)
     metadata["rendered_duration_seconds"] = round(sum(c.duration for c in clips), 2)
 
 
