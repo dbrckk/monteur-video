@@ -139,3 +139,9 @@ Aucun code externe d'éditeur vidéo n'est recopié ni intégré sans étude de 
 - Les filtres sont des profils FFmpeg prédéfinis et contrôlés, non une génération IA de style ; l'aperçu CSS est indicatif. Le fichier filtré est réencodé avant téléchargement et peut demander du temps supplémentaire sur les vidéos longues.
 - Plusieurs exports filtrés peuvent être mis en file d'attente et partagent le worker FFmpeg ; le master n'est pas remplacé. La version originale est conservée.
 - Même sur un site statique gratuit, il faut un moteur FFmpeg/Whisper HTTPS accessible en permanence depuis le téléphone. Pas de transfert garanti en arrière-plan après la fermeture de Chrome Android.
+
+### Sélection visuelle intelligente (bêta)
+
+Le mode **Auto** peut proposer un montage de 10 ou 15 secondes, même à partir d'un long rush, lorsque l'activité visuelle est concentrée sur quelques instants. Chaque rush est analysé avec FFmpeg à **2 images/seconde, en 192 px**, sans modèle lourd : variation entre images (mouvement), luminance, détails visuels (proxy de netteté), fonds noirs et images figées. Les passages silencieux sont préservés si l'image montre une activité utile. Les analyses sont réutilisées lors de la sélection pour éviter un second calcul. Si l'analyse visuelle échoue, le montage reste possible avec la sélection classique.
+
+Ces heuristiques **ne reconnaissent pas réellement** les exercices, les personnes ou les mouvements sportifs, et un mouvement de caméra peut être confondu avec l'action. Elles aident à choisir les plans, mais ne garantissent pas la détection du meilleur instant. La résolution publique reste **720p HD**, en portrait ou paysage.

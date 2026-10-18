@@ -11,7 +11,7 @@ RUN if [ "$INSTALL_WHISPER" = "1" ]; then \
     else \
       pip install --no-cache-dir -r requirements.txt; \
     fi
-COPY editor.py montage.py server.py ./
+COPY editor.py montage.py visual_quality.py server.py ./
 COPY web/ ./web/
 RUN useradd -m -u 10001 appuser && mkdir -p /data && chown appuser:appuser /data
 USER appuser

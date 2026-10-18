@@ -28,6 +28,17 @@ class AutomaticDurationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 automatic_duration([80], counts)
 
+    def test_motion_burst_makes_long_footage_short(self):
+        self.assertEqual(automatic_duration([180], [0], activity_seconds=8), 10)
+        self.assertEqual(automatic_duration([180], [0], activity_seconds=15), 15)
+        self.assertEqual(automatic_duration([180], [0], activity_seconds=35), 60)
+        self.assertEqual(automatic_duration([180], [45], activity_seconds=8), 10)
+
+    def test_invalid_motion_activity(self):
+        for activity in (-1, float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                automatic_duration([120], activity_seconds=activity)
+
     def test_no_padding(self):
         self.assertAlmostEqual(sum(allocation([6, 6], automatic_duration([6, 6]))), 10)
         self.assertAlmostEqual(sum(allocation([4, 4], automatic_duration([4, 4]))), 8)

@@ -154,7 +154,8 @@ def active_ranges(duration: float, silences: list[tuple[float, float]]) -> list[
 
 def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float, float]],
                transcript: list[dict], target_seconds: float = 45,
-               allow_short: bool = False) -> list[Clip]:
+               allow_short: bool = False,
+               visual_samples: list | None = None) -> list[Clip]:
     """Select highlights across the entire recording, respecting pauses and visual cuts.
 
     Stratified buckets prevent a long, low-dialogue video from collapsing into its
@@ -165,7 +166,13 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
     minimum = 1 if allow_short else 10
     if not minimum <= target_seconds <= 180:
         raise ValueError(f"La durée cible doit être comprise entre {minimum} et 180 secondes.")
-    ranges = active_ranges(duration, silences) or [(0.0, duration)]
+    # For gym footage, silence can contain the most valuable repetitions.
+    # Prefer visible ranges, even with no soundtrack or spoken narration.
+    if visual_samples:
+        from visual_quality import usable_ranges
+        ranges = usable_ranges(visual_samples, duration) or [(0.0, duration)]
+    else:
+        ranges = active_ranges(duration, silences) or [(0.0, duration)]
     boundaries = sorted(scenes)
     candidates: list[Clip] = []
     for start, end in ranges:
@@ -185,10 +192,18 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
             scene_bonus = (0.4 if near < len(boundaries)
                            and abs(boundaries[near] - cursor) < 0.8 else 0.0)
             score = 1.0 + bonus + scene_bonus + min(2.0, len(spoken) / 120)
+            if visual_samples:
+                from visual_quality import clip_quality
+                quality_bonus, unusable = clip_quality(visual_samples, cursor, stop)
+                if unusable:
+                    cursor = stop
+                    continue
+                score += quality_bonus
             candidates.append(Clip(round(cursor, 3), round(stop, 3), score))
             cursor = stop
     if not candidates:
-        return [Clip(0.0, duration, 1.0)]
+        # Never export the entire rush when the requested highlight is short.
+        return [Clip(0.0, min(duration, float(target_seconds)), 1.0)]
 
     bucket_count = min(len(candidates), max(1, math.ceil(target_seconds / 5.5)))
     buckets: list[list[Clip]] = [[] for _ in range(bucket_count)]
@@ -342,6 +357,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                transcribe: bool = True, size: int = 1080,
                allow_short: bool = False,
                detected_scenes: list[float] | None = None,
+               visual_samples: list | None = None,
                progress: Callable[[float, str], None] | None = None) -> dict:
     if aspect not in {"vertical", "youtube"}:
         raise ValueError("Format inconnu.")
@@ -359,8 +375,11 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     if progress:
         progress(0.32, "silence")
     silences = detect_silences(source, info["duration"], info["has_audio"])
+    if visual_samples is None:
+        from visual_quality import analyze_visual
+        visual_samples = analyze_visual(source)
     clips = plan_clips(info["duration"], scenes, silences, transcript, target_seconds,
-                       allow_short=allow_short)
+                       allow_short=allow_short, visual_samples=visual_samples)
     # Publication text must describe what survived editing, not unseen source footage.
     selected_speech = [phrase for phrase in transcript
                        if any(phrase["start"] < clip.end and phrase["end"] > clip.start
@@ -370,6 +389,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                      "speech_engine": asr_mode, "captions_generated": bool(selected_speech),
                      "selected_transcript": selected_speech,
                      "scene_count": len(scenes),
+                     "visual_analysis": "motion_luminance_detail" if visual_samples else "unavailable",
                      "clips": [{"start": c.start, "end": c.end, "score": round(c.score, 2)}
                                for c in clips]})
     if progress:

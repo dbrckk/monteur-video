@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 from editor import THEMES, detect_scenes, edit_video, execute, probe_media, social_metadata
+from visual_quality import analyze_visual
 
 MAX_SOURCES = 10
 FILTER_PRESETS = {
@@ -72,7 +73,8 @@ def filter_catalog(theme: str) -> list[dict]:
              "recommended": key in suggested} for key in keys]
 
 
-def automatic_duration(durations: Sequence[float], scene_counts: Sequence[int] | None = None) -> int:
+def automatic_duration(durations: Sequence[float], scene_counts: Sequence[int] | None = None,
+                       activity_seconds: float | None = None) -> int:
     """Choose a short-form target without padding or inventing missing footage."""
     if not durations or any(not math.isfinite(d) or d < 1 for d in durations):
         raise ValueError("Sources vidéo invalides")
@@ -80,6 +82,9 @@ def automatic_duration(durations: Sequence[float], scene_counts: Sequence[int] |
     if scene_counts is not None and (len(scene_counts) != len(durations) or
                                      any(n < 0 for n in scene_counts)):
         raise ValueError("Analyse des scènes incohérente")
+    if activity_seconds is not None and (not math.isfinite(activity_seconds) or
+                                         activity_seconds < 0):
+        raise ValueError("Activité visuelle invalide")
     if available < 10:
         return 10  # Final export naturally stops at available source duration.
     if available < 20:
@@ -98,9 +103,15 @@ def automatic_duration(durations: Sequence[float], scene_counts: Sequence[int] |
     if scene_counts is not None and available >= 35:
         cuts_per_minute = sum(scene_counts) * 60 / available
         if cuts_per_minute >= 18:
-            return min(baseline, 15)
-        if cuts_per_minute >= 9:
-            return min(baseline, 30)
+            baseline = min(baseline, 15)
+        elif cuts_per_minute >= 9:
+            baseline = min(baseline, 30)
+    # Even a stationary gym camera may capture a very short action burst.
+    if activity_seconds is not None and available >= 35:
+        if 6 <= activity_seconds < 10 and activity_seconds <= available * 0.2:
+            baseline = min(baseline, 10)
+        elif 10 <= activity_seconds <= 20 and activity_seconds <= available * 0.3:
+            baseline = min(baseline, 15)
     return baseline
 
 
@@ -149,15 +160,23 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
     auto_mode = target_seconds == 0
     scene_cache = ([detect_scenes(Path(src), item["duration"])
                     for src, item in zip(sources, info)] if auto_mode else None)
+    quality_cache = ([analyze_visual(Path(src)) for src in sources] if auto_mode else None)
     if auto_mode:
+        analyzed = [sample for rush in quality_cache for sample in rush]
+        # Optical change is a proxy for action, not workout recognition.
+        activity_seconds = (sum(0.5 for x in analyzed if x.motion >= 3.5 and
+                                25 <= x.luminance <= 230 and x.detail >= 4)
+                            if analyzed else None)
         target_seconds = automatic_duration([item["duration"] for item in info],
-                                            [len(s) for s in scene_cache])
+                                            [len(s) for s in scene_cache],
+                                            activity_seconds=activity_seconds)
     budgets = allocation([item["duration"] for item in info], target_seconds)
     if len(sources) == 1:
         result = edit_video(Path(sources[0]), destination, theme=theme, aspect=aspect,
                             target_seconds=target_seconds, transcribe=transcribe,
                             size=size, progress=progress,
-                            detected_scenes=scene_cache[0] if scene_cache is not None else None)
+                            detected_scenes=scene_cache[0] if scene_cache is not None else None,
+                            visual_samples=quality_cache[0] if quality_cache is not None else None)
         result["target_duration_seconds"] = target_seconds
         result["duration_mode"] = "auto" if auto_mode else "manual"
         result["source_count"] = 1
@@ -184,6 +203,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             target_seconds=budget, transcribe=transcribe, size=size,
             allow_short=True,
             detected_scenes=scene_cache[i] if scene_cache is not None else None,
+            visual_samples=quality_cache[i] if quality_cache is not None else None,
             progress=(lambda p, stage, i=i: progress(
                 min(0.91, 0.02 + (i + p) / len(sources) * 0.88), stage))
             if progress else None,
@@ -197,6 +217,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             "duration_seconds": round(duration["duration"], 2),
             "rendered_seconds": child["rendered_duration_seconds"],
             "speech_engine": child["speech_engine"],
+            "visual_analysis": child.get("visual_analysis", "unavailable"),
         })
     concat = work / "playlist.txt"
     concat.write_text("".join(f"file '{part.name}'\n" for part in rendered), encoding="utf-8")
@@ -213,6 +234,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "duration_mode": "auto" if auto_mode else "manual",
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
+        "visual_analysis": ("motion_luminance_detail" if any(
+            x["visual_analysis"] != "unavailable" for x in details) else "unavailable"),
         "sources": details,
         "clips": combined_clips,
         "captions_generated": bool(selected_speech),
