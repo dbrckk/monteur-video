@@ -22,6 +22,17 @@ class PlanningTests(unittest.TestCase):
             self.assertGreater(clip.duration, 0)
             self.assertLessEqual(clip.end, 120)
 
+    def test_long_recording_covers_late_highlights(self):
+        clips = plan_clips(3600, [], [], [], 45)
+        self.assertGreater(len(clips), 4)
+        self.assertGreater(max(x.start for x in clips), 3000)
+        self.assertLess(min(x.start for x in clips), 600)
+        self.assertLessEqual(sum(x.duration for x in clips), 45.01)
+
+    def test_reject_invalid_target(self):
+        with self.assertRaises(ValueError):
+            plan_clips(100, [], [], [], 181)
+
     def test_no_invented_activity_tags(self):
         info = social_metadata("fitness", [], 500)
         self.assertIn("fitness", info["hashtags"])
