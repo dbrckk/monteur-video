@@ -466,9 +466,18 @@
         const meta = job.metadata || {};
         $("metadata").style.display = "block";
         $("description").value = meta.description || "";
-        $("quality").textContent = meta.captions_generated
-          ? "Sous-titres générés depuis la transcription réelle de la voix."
-          : "Pas de transcription disponible : aucun sous-titre ni tag vocal inventé.";
+        const actualSeconds = Number(meta.rendered_duration_seconds);
+        const durationLabel = Number.isFinite(actualSeconds) && actualSeconds > 0
+          ? "Durée finale : " + actualSeconds.toFixed(1).replace(".", ",") + " s. "
+          : "";
+        const modeLabel = meta.duration_mode === "auto"
+          ? "Durée choisie automatiquement. " : "";
+        const analysisLabel = meta.visual_analysis === "motion_luminance_detail"
+          ? "Sélection assistée par mouvement, luminosité et détails visuels. " : "";
+        const captionsLabel = meta.captions_generated
+          ? "Sous-titres issus de la transcription réelle de la voix."
+          : "Sans transcription : aucun sous-titre ni tag vocal inventé.";
+        $("quality").textContent = durationLabel + modeLabel + analysisLabel + captionsLabel;
         return;
       }
       pollTimer = setTimeout(() => poll(id), 2500);
