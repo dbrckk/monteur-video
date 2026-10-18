@@ -550,9 +550,14 @@
         const narrativeLabel = meta.sequence_strategy === "energy_arc" && meta.source_count > 1
           ? "Rushs organisés par intensité visuelle (introduction, montée, pic, conclusion). " : "";
         const soundtrack = meta.soundtrack || {};
+        const match = meta.music_profile || {};
+        const matched = match.selection_method === "visual_motion_scene_density"
+          ? "Musique adaptée au mouvement et au rythme des scènes. "
+          : "Musique choisie selon le thème (analyse visuelle insuffisante). ";
         const musicLabel = soundtrack.music_generated
-          ? "Musique originale : " + soundtrack.title + " · " + soundtrack.bpm +
-            " BPM. Son des rushs : " + Math.round((soundtrack.original_audio_volume || 0) * 100) + " %. "
+          ? matched + "Piste originale : " + soundtrack.title + " · " +
+            soundtrack.bpm + " BPM. Son des rushs : " +
+            Math.round((soundtrack.original_audio_volume || 0) * 100) + " %. "
           : "";
         $("quality").textContent = durationLabel + modeLabel + narrativeLabel + musicLabel + analysisLabel + captionsLabel;
         return;
