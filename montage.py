@@ -260,26 +260,28 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
     details = []
     selected_speech = []
     combined_clips = []
-    for i, (source, duration, budget) in enumerate(zip(sources, info, budgets)):
-        part = work / f"rush-{i:02}.mp4"
+    for position, index in enumerate(order):
+        source, duration, budget = sources[index], info[index], budgets[index]
+        part = work / f"rush-{position:02}.mp4"
         if progress:
-            progress(0.02 + i / len(sources) * 0.88, "scenes")
+            progress(0.32 + position / len(sources) * 0.62, "highlights")
         child = edit_video(
             Path(source), part, theme=theme, aspect=aspect,
             target_seconds=budget, transcribe=transcribe, size=size,
             allow_short=True,
-            detected_scenes=scene_cache[i] if scene_cache is not None else None,
-            visual_samples=quality_cache[i] if quality_cache is not None else None,
-            progress=(lambda p, stage, i=i: progress(
-                min(0.91, 0.02 + (i + p) / len(sources) * 0.88), stage))
+            detected_scenes=scene_cache[index],
+            visual_samples=quality_cache[index],
+            progress=(lambda p, stage, position=position: progress(
+                min(0.94, 0.32 + (position + p) / len(sources) * 0.62), stage))
             if progress else None,
         )
         rendered.append(part)
         selected_speech.extend(child.get("selected_transcript", []))
-        combined_clips.extend({"source_index": i, **clip} for clip in child["clips"])
+        combined_clips.extend({"source_index": index, "sequence_position": position,
+                               **clip} for clip in child["clips"])
         details.append({
-            "index": i,
-            "name": source_names[i] if source_names else Path(source).name,
+            "index": index, "sequence_position": position,
+            "name": source_names[index] if source_names else Path(source).name,
             "duration_seconds": round(duration["duration"], 2),
             "rendered_seconds": child["rendered_duration_seconds"],
             "speech_engine": child["speech_engine"],
@@ -300,6 +302,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "duration_mode": "auto" if auto_mode else "manual",
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
+        "sequence_strategy": "energy_arc",
+        "sequence_order": order,
         "visual_analysis": ("motion_luminance_detail" if any(
             x["visual_analysis"] != "unavailable" for x in details) else "unavailable"),
         "sources": details,
