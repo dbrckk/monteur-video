@@ -6,9 +6,9 @@ Application web **mobile-first** avec moteur local ou distant sécurisé, constr
 
 ## Bêta HTTPS Render (2026-10-18)
 
-Une instance gratuite de démonstration a été créée : **https://monteur-video-beta.onrender.com**. L'interface statique GitHub Pages utilise désormais cette adresse par défaut ; la clé d'accès n'est **pas** intégrée au code et doit être renseignée par l'utilisateur. La clé est configurée uniquement dans les variables d'environnement du service Render.
+Une instance gratuite de démonstration a été créée : **https://monteur-video-beta.onrender.com**. L'interface statique GitHub Pages utilise désormais cette adresse par défaut ; la clé d'accès n'est **pas** intégrée au code et doit être renseignée par l'utilisateur. Le mode démonstration `MONTEUR_PUBLIC_DEMO=1` est accessible sans clé ; il limite les créations simultanées et vérifie les origines navigateur autorisées. La vérification de l'origine n'est pas une authentification et ne protège pas contre les clients qui falsifient cet en-tête. Pour un serveur privé, conserver `APP_API_TOKEN`.
 
-Configuration gratuite de précaution : `MONTEUR_RENDER_SIZE=360` (360×640 pour Reels), `MAX_UPLOAD_GB=0.35` par fichier, `UPLOAD_TTL_HOURS=6`, `RESULT_TTL_DAYS=1`. Les fonctionnalités d'édition (1–10 sources, filtres et export) sont identiques mais les vidéos longues/volumineuses et les gros projets peuvent dépasser les ressources gratuites.
+Configuration gratuite de précaution : `MONTEUR_RENDER_SIZE=720` (720×1280 HD pour Reels), `MAX_UPLOAD_GB=0.35` par fichier, `UPLOAD_TTL_HOURS=6`, `RESULT_TTL_DAYS=1`. Les fonctionnalités d'édition (1–10 sources, filtres et export) sont identiques mais les vidéos longues/volumineuses et les gros projets peuvent dépasser les ressources gratuites.
 
 **Avertissement :** Render Free peut mettre l'instance en veille et effacer les fichiers du disque éphémère lors d'un redémarrage ou déploiement. Aucun stockage persistant n'est configuré. Ne pas utiliser pour des rushs irremplaçables ; conserver les originaux sur le téléphone. La transcription Whisper est désactivée dans cette image allégée, mais les montages FFmpeg et les filtres fonctionnent. Cette bêta n'est pas une garantie de stabilité pour des vidéos de plusieurs heures.
 
