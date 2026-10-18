@@ -17,6 +17,14 @@ L'interface publique [Monteur Studio](https://dbrckk.github.io/monteur-video/) u
 
 Les anciennes instances `monteur-video-beta` et `monteur-video-hd` ne sont plus les points d'accès par défaut. La transcription Whisper est désactivée sur le moteur gratuit allégé ; aucune transcription/sous-titre n'est inventé lorsque ce module est absent.
 
+## Montage automatique cohérent et suivi de progression
+
+Le moteur compose désormais une **progression visuelle indépendante de l'ordre d'importation** : plan d'ouverture relativement calme, effort croissant, moment fort, conclusion plus posée. Le classement repose sur le mouvement et le niveau de détail des images échantillonnées, avec un départage déterministe par contenu. Il ne reconnaît pas encore les exercices, les personnes, les émotions ou la chronologie réelle des événements ; les rushs ambigus peuvent donc nécessiter une sélection manuelle dans une version ultérieure.
+
+Les longs rushs sont analysés sur des fenêtres réparties sur toute leur durée, avec recherche FFmpeg bornée (24 secondes échantillonnées par rush par défaut, `MONTEUR_ANALYSIS_SECONDS` configurable). Cela réduit les décodages exhaustifs sur hébergement gratuit. Les progressions `probe`, `scenes`, `quality`, `story` et `render` correspondent désormais à des étapes réelles. L'analyse des silences audio, inutilisée pour décider quels mouvements sportifs conserver, n'est plus effectuée.
+
+L'encodage est limité en threads et les sous-clips ont de légers fondus audio aux points de coupe, sans musique externe ajoutée. Chaque sous-processus FFmpeg critique dispose d'une limite de temps ; un échec explicite est préférable à un montage bloqué indéfiniment. Comme les images ne sont échantillonnées qu'à intervalles pour économiser le CPU, le meilleur mouvement d'un rush très long peut encore passer entre deux fenêtres.
+
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.
