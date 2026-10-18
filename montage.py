@@ -240,7 +240,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                             progress=(lambda p, stage: progress(0.32 + p * 0.62, stage))
                             if progress else None,
                             detected_scenes=scene_cache[0],
-                            visual_samples=quality_cache[0]
+                            visual_samples=quality_cache[0])
         result["target_duration_seconds"] = target_seconds
         result["duration_mode"] = "auto" if auto_mode else "manual"
         result["source_count"] = 1
