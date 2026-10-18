@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import os
+import hashlib
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -141,6 +142,47 @@ def allocation(durations: Sequence[float], requested: int) -> list[float]:
             granted += amount
         remaining -= granted
     return budgets
+
+
+def _content_fingerprint(path: Path) -> str:
+    """Stable source tie-breaker independent of Android upload order or filename."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        digest.update(stream.read(65536))
+        length = stream.seek(0, 2)
+        if length > 65536:
+            stream.seek(max(0, length - 65536))
+            digest.update(stream.read(65536))
+    digest.update(str(length).encode("ascii"))
+    return digest.hexdigest()
+
+
+def narrative_order(sources: Sequence[Path], samples: Sequence[list]) -> list[int]:
+    """Visual-energy arc: context -> effort builds -> peak -> calmer closing shot.
+
+    These are measured shot properties, not a claim to understand exercise
+    semantics. Content hashes make ties independent of upload order.
+    """
+    if len(sources) != len(samples):
+        raise ValueError("Analyse des rushs incohérente")
+    if len(sources) < 2:
+        return list(range(len(sources)))
+
+    def features(index: int) -> tuple[float, float, str]:
+        usable = [x for x in samples[index] if 25 <= x.luminance <= 230
+                  and x.detail >= 2]
+        if usable:
+            motion = sorted(min(24, max(0, x.motion)) for x in usable)
+            activity = motion[int((len(motion) - 1) * 0.70)]
+            clarity = sum(min(48, x.detail) for x in usable) / len(usable)
+            # Visual energy is primary; clarity avoids a blurred establishing shot.
+            return round(activity + 0.04 * clarity, 3), round(clarity, 3), _content_fingerprint(sources[index])
+        return -1.0, -1.0, _content_fingerprint(sources[index])
+
+    ranked = sorted(range(len(sources)), key=features)
+    if len(ranked) <= 2:
+        return ranked
+    return [ranked[0], *ranked[2:], ranked[1]]
 
 
 def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitness",
