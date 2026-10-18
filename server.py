@@ -258,6 +258,24 @@ def homepage():
     return HTMLResponse(WEB.read_text(encoding="utf-8"))
 
 
+@app.get("/manifest.webmanifest")
+def mobile_manifest():
+    return FileResponse(WEB.parent / "manifest.webmanifest",
+                        media_type="application/manifest+json")
+
+
+@app.get("/icon.svg")
+def mobile_icon():
+    return FileResponse(WEB.parent / "icon.svg", media_type="image/svg+xml")
+
+
+@app.get("/sw.js")
+def mobile_service_worker():
+    return FileResponse(WEB.parent / "sw.js", media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/",
+                                 "Cache-Control": "no-cache"})
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True, "transcription_optional": True, "max_upload_bytes": MAX_SIZE}
