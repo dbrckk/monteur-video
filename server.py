@@ -352,6 +352,16 @@ def health():
             "result_ttl_days": RESULT_TTL_DAYS}
 
 
+@app.get("/api/session", dependencies=[Depends(authorize)])
+def session_info():
+    """Authenticated readiness check for remote mobile clients."""
+    return {"ok": True, "version": app.version,
+            "max_sources": MAX_SOURCES, "max_upload_bytes": MAX_SIZE,
+            "free_disk_bytes": shutil.disk_usage(ROOT).free,
+            "upload_ttl_hours": UPLOAD_TTL_HOURS,
+            "result_ttl_days": RESULT_TTL_DAYS}
+
+
 @app.post("/api/login")
 def login(data: LoginRequest, response: Response, request: Request):
     if API_TOKEN and not hmac.compare_digest(data.token, API_TOKEN):
@@ -513,9 +523,14 @@ def create_montage(data: MontageRequest):
 @app.get("/api/jobs/{ident}", dependencies=[Depends(authorize)])
 def job_status(ident: str):
     data = get_job(ident)
+    expires_at = None
+    if data["status"] in {"done", "failed"}:
+        stamp = datetime.fromisoformat(data["updated_at"] or data["created_at"])
+        expires_at = (stamp + timedelta(days=RESULT_TTL_DAYS)).isoformat()
     return {"id": data["id"], "filename": data["filename"],
             "status": data["status"], "stage": data["stage"],
             "progress": data["progress"], "error": data["error"],
+            "expires_at": expires_at,
             "metadata": json.loads(data["metadata"]) if data["metadata"] else None}
 
 
