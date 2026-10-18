@@ -202,7 +202,8 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
             candidates.append(Clip(round(cursor, 3), round(stop, 3), score))
             cursor = stop
     if not candidates:
-        return [Clip(0.0, duration, 1.0)]
+        # Never export the entire rush when the requested highlight is short.
+        return [Clip(0.0, min(duration, float(target_seconds)), 1.0)]
 
     bucket_count = min(len(candidates), max(1, math.ceil(target_seconds / 5.5)))
     buckets: list[list[Clip]] = [[] for _ in range(bucket_count)]
