@@ -56,6 +56,14 @@ Le mode **Musique originale intégrée au MP4** demeure disponible et produit un
 
 Source : https://soundmatcha.com/for/gym/ — classement public à citer par lien. Conditions musicales de Meta : https://www.facebook.com/help/instagram/402084904469945 . Contrat CapCut : https://www.capcut.com/clause/material-license-agreement .
 
+## Chronologie de tournage et étalonnage automatique
+
+Le moteur utilise les métadonnées de **date/heure de capture** de FFprobe et QuickTime (fuseau horaire compris) pour reconstruire la séquence réelle, **quel que soit l'ordre d'import des fichiers**. Les clips internes à chaque rush restent temporellement ordonnés. Lorsque les informations de capture sont manquantes ou non comparables, le système évite les dates de modification trompeuses : il revient à une progression visuelle déterministe introduction → effort → pic → conclusion. Cette solution ne prétend pas deviner l'ordre réel d'événements impossibles à distinguer visuellement sans dates de capture.
+
+L'**étalonnage automatique** s'appuie sur les mesures de chaque rush, réalisées pendant l'analyse visuelle existante : luminance Y et chrominances U/V. Le moteur construit une référence robuste issue de plusieurs vidéos puis limite les corrections de luminosité, balance colorimétrique et contraste/saturation par thème. Les séquences sous-exposées, complètement noires ou insuffisamment analysées ne reçoivent pas de correction agressive. L'étalonnage est intégré à l'encodage des extraits (sans deuxième encodage complet), et ses coefficients ainsi que la stratégie chronologique sont consultables dans les métadonnées de sortie.
+
+Limites : ce processus n'effectue pas de reconnaissance sémantique des exercices, suivi du visage ou correspondance 3D de la scène ; il ne remplace pas un étalonneur professionnel sur des images très sous-exposées ou des caméras aux espaces colorimétriques incompatibles.
+
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.
