@@ -64,6 +64,12 @@ L'**étalonnage automatique** s'appuie sur les mesures de chaque rush, réalisé
 
 Limites : ce processus n'effectue pas de reconnaissance sémantique des exercices, suivi du visage ou correspondance 3D de la scène ; il ne remplace pas un étalonneur professionnel sur des images très sous-exposées ou des caméras aux espaces colorimétriques incompatibles.
 
+### Reconstruction chronologique et étalonnage plan par plan — amélioration
+
+Quand les métadonnées caméra ont disparu, l'application essaie désormais des **dates intégrées aux noms de fichiers d'origine** (formats de caméra `VID_YYYYMMDD_HHMMSS`, `PXL_...`, `IMG_...`), à condition que **tous les rushes** présentent des noms de capture interprétables et qu'aucun fuseau horaire contradictoire ne soit à comparer. Si plusieurs dates de tournage fiables sont présentes mais qu'il manque celles d'autres clips, elles servent de **points d'ancrage dont l'ordre est préservé** ; les rushes non datés sont intercalés selon la progression visuelle. Les métadonnées distinguent `capture_time`, `camera_filename_time`, `capture_anchors_visual_gaps` et `energy_arc_no_reliable_timestamps`. Sans horodatage sûr, aucune méthode ne peut garantir l'ordre chronologique réel ; on ne le prétend pas.
+
+L'étalonnage est maintenant **adaptatif pour chaque passage retenu**, avec correction locale de luminosité et de composantes U/V, en utilisant la référence de couleur commune à tout le montage. Les corrections restent bornées (y compris dans les hautes lumières et les ombres extrêmes) et reviennent à la correction par rush lorsque les échantillons locaux sont insuffisants. Cela réduit les ruptures d'exposition **à l'intérieur même d'une longue prise**, et pas seulement entre vidéos distinctes.
+
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.

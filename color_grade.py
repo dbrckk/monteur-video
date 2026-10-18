@@ -76,3 +76,47 @@ def grade_plan(samples_by_rush: Sequence[Sequence], theme: str = "fitness") -> d
         "bounded": True,
         "reference": "median_of_valid_sources",
     }
+
+
+def adaptive_shot_filters(samples: Sequence, clips: Sequence, theme: str,
+                          shared_grade: dict | None = None,
+                          source_index: int = 0) -> list[str | None]:
+    """Match exposure/color shot-by-shot while preserving highlight headroom.
+
+    Apply local corrections only where enough sampled frames exist; otherwise
+    reuse the safe per-source grade. Robust per-shot statistics stop one over-
+    exposed segment from forcing the entire recording to a bad midpoint.
+    """
+    reference = shared_grade or grade_plan([samples], theme)
+    source_grades = reference.get("source_grades") or []
+    base = source_grades[source_index].get("filter") if source_index < len(source_grades) else None
+    target = float(reference.get("target_luma", 112))
+    global_stats = rush_color_stats(samples)
+    if global_stats is None:
+        return [base for _ in clips]
+    style = {
+        "fitness": (1.065, 1.055), "sport": (1.055, 1.075),
+        "motivation": (1.055, 1.015), "lifestyle": (1.025, 1.035),
+        "auto": (1.035, 1.035),
+    }
+    contrast, saturation = style.get(theme, style["auto"])
+    outputs: list[str | None] = []
+    for clip in clips:
+        local = rush_color_stats([p for p in samples if clip.start <= p.time < clip.end])
+        if not local:
+            outputs.append(base)
+            continue
+        # Mix global and shot-specific exposure to avoid flicker and oscillation.
+        local_target = .72 * target + .28 * global_stats["luma"]
+        brightness = _clamp((local_target - local["luma"]) / 255, -.065, .065)
+        # Avoid trying to rescue crushed blacks and clipped skies with exposure.
+        if local["luma"] < 45 or local["luma"] > 207:
+            brightness = _clamp(brightness, -.025, .025)
+        u_delta = _clamp((global_stats["u"] - local["u"]) / 255 * .65, -.035, .035)
+        v_delta = _clamp((global_stats["v"] - local["v"]) / 255 * .65, -.035, .035)
+        outputs.append(
+            f"eq=contrast={contrast:.3f}:brightness={brightness:.4f}:"
+            f"saturation={saturation:.3f},"
+            f"colorbalance=rs={v_delta:.4f}:bs={u_delta:.4f}"
+        )
+    return outputs

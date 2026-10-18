@@ -30,6 +30,30 @@ class ColorConsistencyTests(unittest.TestCase):
         self.assertIn("colorbalance=", grades[0]["filter"])
         self.assertIn("eq=contrast=", grades[1]["filter"])
 
+    def test_shot_level_grading_adapts_within_one_rush(self):
+        from editor import Clip
+        from color_grade import adaptive_shot_filters
+        shots = [*[
+            VisualSample(i * .5, 68, 5, 19, 118, 144) for i in range(10)
+        ], *[
+            VisualSample(5 + i * .5, 169, 5, 19, 139, 115) for i in range(10)
+        ]]
+        clips = [Clip(0, 5, 3), Clip(5, 10, 3)]
+        plan = grade_plan([shots], "fitness")
+        filters = adaptive_shot_filters(shots, clips, "fitness", plan)
+        self.assertEqual(len(filters), 2)
+        self.assertNotEqual(filters[0], filters[1])
+        self.assertTrue(all("colorbalance=" in f for f in filters))
+
+    def test_shot_grade_uses_fallback_without_valid_samples(self):
+        from editor import Clip
+        from color_grade import adaptive_shot_filters
+        clips = [Clip(0, 2, 1), Clip(12, 15, 1)]
+        items = samples(105)
+        base = grade_plan([items], "fitness")
+        filters = adaptive_shot_filters(items, clips, "fitness", base)
+        self.assertEqual(filters[1], base["source_grades"][0]["filter"])
+
     def test_dark_or_unknown_rush_not_forcibly_graded(self):
         result = grade_plan([samples(9), []], "lifestyle")
         self.assertIsNone(result["source_grades"][0]["filter"])
@@ -70,6 +94,34 @@ class ChronologyTests(unittest.TestCase):
                 [{"captured_at":"2026-01-01T12:00:00+00:00"} for _ in paths])
             self.assertEqual(method, "energy_arc_no_reliable_timestamps")
             self.assertEqual(sorted(order), [0, 1, 2])
+
+    def test_android_camera_filenames_reconstruct_order(self):
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder) / f"upload-{i}.mp4" for i in range(3)]
+            for i, path in enumerate(paths):
+                path.write_bytes(bytes([i+1]) * 100)
+            names = ["VID_20260803_143020.mp4", "PXL_20260803_140010.mp4",
+                     "VID_20260803_141200.mp4"]
+            order, strategy = chronological_order(
+                paths, [samples(9), samples(2), samples(5)],
+                [{"captured_at": None}] * 3, names)
+            self.assertEqual(strategy, "camera_filename_time")
+            self.assertEqual(order, [1, 2, 0])
+
+    def test_partial_capture_anchors_keep_known_temporal_order(self):
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder) / f"{i}.mp4" for i in range(4)]
+            for i, path in enumerate(paths):
+                path.write_bytes(bytes([i+1]) * 100)
+            info = [{"captured_at": "2026-01-02T00:00:00+00:00"},
+                    {"captured_at": None},
+                    {"captured_at": "2026-01-01T00:00:00+00:00"},
+                    {"captured_at": None}]
+            order, method = chronological_order(
+                paths, [samples(9), samples(2), samples(5), samples(7)], info)
+            self.assertEqual(method, "capture_anchors_visual_gaps")
+            self.assertLess(order.index(2), order.index(0))
+            self.assertEqual(sorted(order), list(range(4)))
 
     def test_partial_dates_do_not_invent_camera_timeline(self):
         with tempfile.TemporaryDirectory() as folder:

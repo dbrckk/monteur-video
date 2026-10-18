@@ -612,11 +612,15 @@
           ? "Sous-titres issus de la transcription réelle de la voix."
           : "Sans transcription : aucun sous-titre ni tag vocal inventé.";
         const narrativeLabel = meta.sequence_strategy === "capture_time"
-          ? "Rushs organisés selon leurs dates de tournage vérifiées. "
+          ? "Rushs organisés selon les dates de tournage intégrées. "
+          : meta.sequence_strategy === "camera_filename_time"
+          ? "Ordre reconstruit depuis les dates dans les noms des vidéos caméra. "
+          : meta.sequence_strategy === "capture_anchors_visual_gaps"
+          ? "Dates partielles : ordre des prises datées préservé, autres plans placés selon le récit visuel. "
           : meta.source_count > 1
-          ? "Dates de tournage incomplètes : montage organisé par intensité visuelle. " : "";
+          ? "Chronologie non vérifiable : ordre estimé par progression visuelle. " : "";
         const colorLabel = meta.color_grade?.source_grades?.some(g => g.measured)
-          ? "Étalonnage automatique : exposition et couleurs harmonisées entre les plans. " : "";
+          ? "Étalonnage adaptatif : exposition et couleurs harmonisées plan par plan. " : "";
         const soundtrack = meta.soundtrack || {};
         const match = meta.music_profile || {};
         const matched = match.selection_method === "visual_motion_scene_density"

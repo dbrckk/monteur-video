@@ -372,7 +372,8 @@ def create_captions(path: Path, clip: Clip, transcript: list[dict], vertical: bo
 def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
            transcript: list[dict], vertical: bool, has_audio: bool,
            size: int = 1080, progress: Callable[[float, str], None] | None = None,
-           grade_filter: str | None = None) -> None:
+           grade_filter: str | None = None,
+           shot_filters: list[str | None] | None = None) -> None:
     if not clips:
         raise ValueError("Aucun passage utilisable.")
     work = destination.parent / "segments"
@@ -385,8 +386,9 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
         part = work / f"{i:04}.mp4"
         scaling = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
                    f"crop={w}:{h},setsar=1")
-        if grade_filter:
-            scaling += "," + grade_filter
+        clip_filter = shot_filters[i] if shot_filters is not None else grade_filter
+        if clip_filter:
+            scaling += "," + clip_filter
         ass = work / f"{i:04}.ass"
         if create_captions(ass, clip, transcript, vertical):
             # Segments are named with UUID parent / numeric basename: safe for FFmpeg quoting.
@@ -426,6 +428,8 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                visual_samples: list | None = None,
                music_profile: dict | None = None,
                grade_filter: str | None = None,
+               color_reference: dict | None = None,
+               source_index: int = 0,
                progress: Callable[[float, str], None] | None = None) -> dict:
     if aspect not in {"vertical", "youtube"}:
         raise ValueError("Format inconnu.")
@@ -455,6 +459,10 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
                        allow_short=allow_short, visual_samples=visual_samples,
                        beat_seconds=beat_grid)
+    from color_grade import adaptive_shot_filters
+    shot_filters = adaptive_shot_filters(visual_samples or [], clips, theme,
+                                        shared_grade=color_reference,
+                                        source_index=source_index)
     # Publication text must describe what survived editing, not unseen source footage.
     selected_speech = [phrase for phrase in transcript
                        if any(phrase["start"] < clip.end and phrase["end"] > clip.start
@@ -466,14 +474,15 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                      "scene_count": len(scenes),
                      "visual_analysis": "motion_luminance_detail" if visual_samples else "unavailable",
                      "cut_style": "beat_synced" if beat_grid else "editorial",
-                     "auto_color_grading": bool(grade_filter),
+                     "auto_color_grading": any(bool(v) for v in shot_filters),
+                     "per_shot_color_matching": True,
                      "clips": [{"start": c.start, "end": c.end, "score": round(c.score, 2)}
                                for c in clips]})
     if progress:
         progress(0.40, "render")
     render(source, destination, clips, metadata, selected_speech,
            aspect == "vertical", info["has_audio"], size, progress,
-           grade_filter=grade_filter)
+           grade_filter=grade_filter, shot_filters=shot_filters)
     if progress:
         progress(1.0, "done")
     return metadata
