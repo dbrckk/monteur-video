@@ -117,7 +117,7 @@
   const $ = id => document.getElementById(id); const API_BASE = (localStorage.getItem("backendUrl") || "").replace(/\/$/, ""); const apiPath = path => API_BASE + path;
   const drop = $("drop"), input = $("video"), button = $("start");
   let pollTimer;
-  const isStatic = location.hostname.endsWith("github.io");
+  const isStatic = location.hostname.endsWith("github.io") || location.hostname.endsWith("shipstatic.com");
   if(isStatic && !API_BASE) { $("mobileHelp").textContent = "Site statique : renseigne d’abord l’adresse HTTPS du moteur de montage. GitHub Pages ne peut pas traiter les vidéos à lui seul."; }
   const stages = {probe:"Vérification des médias",speech:"Transcription de la voix",scenes:"Détection des plans",silence:"Recherche des silences",render:"Encodage des séquences",queued:"En attente du moteur",done:"Montage terminé",failed:"Échec de production"};
   function progress(p,label,message="") {
