@@ -96,9 +96,9 @@ class ChartParserTests(unittest.TestCase):
 
     def test_verified_tempo_ranks_compatible_music_above_otherwise_equal_track(self):
         candidates = [
-            {"title": "Workout", "artist": "Artist", "bpm": 98},
-            {"title": "Workout", "artist": "Artist", "bpm": 150},
-            {"title": "Workout", "artist": "Artist", "bpm": 75},
+            {"title": "Workout", "artist": "Artist", "bpm": 98, "source_url": "https://soundmatcha.com/sound/one/"},
+            {"title": "Workout", "artist": "Artist", "bpm": 150, "source_url": "https://soundmatcha.com/sound/two/"},
+            {"title": "Workout", "artist": "Artist", "bpm": 75, "source_url": "https://soundmatcha.com/sound/three/"},
         ]
         with patch.object(reels_music, "_chart_cached", return_value=tuple(candidates)):
             with patch.object(reels_music, "_instagram_url", return_value=None):
