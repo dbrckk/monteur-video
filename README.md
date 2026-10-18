@@ -6,6 +6,12 @@ Application web **locale** construite pour produire de vrais montages à partir 
 
 ## Site web gratuit — Android / smartphone
 
+**Interface actuellement publiée : https://angled-gate-srzt937.shipstatic.com** (hébergement statique gratuit avec déploiement connecté sans date d'expiration indiquée). GitHub Pages reste une seconde adresse possible après activation des Pages dans les paramètres du dépôt.
+
+**Important :** les deux hébergeurs statiques ne peuvent pas traiter des vidéos. Il reste à connecter un moteur de montage HTTPS.
+
+
+
 L'interface statique est prévue sur **https://dbrckk.github.io/monteur-video/** avec publication automatique par GitHub Pages, après activation de Pages dans les réglages du dépôt. Elle peut s'ajouter à l'écran d'accueil Android (PWA).
 
 **Parcours smartphone :** choisir la vidéo dans la galerie Android, envoyer le fichier par blocs reprenables, garder l'onglet ouvert durant l'envoi, puis le traitement continue côté serveur même après fermeture. L'application conserve le dernier montage pour retrouver le MP4 et le télécharger depuis le téléphone.
