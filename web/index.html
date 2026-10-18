@@ -269,14 +269,25 @@
   async function upload(file, index, batch, totalSize, precedingBytes) {
     const key = batch.id + ":" + index;
     let session = getUploadSessions()[key];
-    if(!session || session.fingerprint !== fileFingerprint(file)) {
-      session = await request("/api/uploads", {method:"POST",
+    const newSession = async () => {
+      const created = await request("/api/uploads", {method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({filename:file.name,size:file.size})});
-      session.fingerprint = fileFingerprint(file);
-      setUploadSession(key, session);
+      created.fingerprint = fileFingerprint(file);
+      setUploadSession(key, created);
+      return created;
+    };
+    if(!session || session.fingerprint !== fileFingerprint(file))
+      session = await newSession();
+    let current;
+    try {
+      current = await request("/api/uploads/" + session.id);
+    } catch(error) {
+      if(error.status !== 404) throw error;
+      // The temporary upload may have vanished after a Render restart.
+      session = await newSession();
+      current = {offset:0, status:"uploading"};
     }
-    const current = await request("/api/uploads/" + session.id);
     if(current.status === "consumed") return session.id;
     if(current.status !== "uploading")
       throw new Error("Vidéo déjà associée à un autre montage. Recharge la page et recommence.");
