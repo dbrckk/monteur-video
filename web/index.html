@@ -210,13 +210,13 @@
       if(job.status === "done") {
         button.disabled = false;
         button.textContent = "Créer un autre montage →";
-        localStorage.removeItem("lastJob");
-        $("resumeJob").style.display = "none";
+        // Keep last finished job for returning mobile users (download later).
+        $("resumeJob").style.display = "block";
         const link = await request("/api/jobs/" + encodeURIComponent(id) + "/download-link");
         const url = apiPath(link.url);
         $("preview").style.display = "block";
         $("download").href = url;
-        $("resultVideo").src = url;
+        $("resultVideo").src = url + "&inline=1";
         const meta = job.metadata || {};
         $("metadata").style.display = "block";
         $("description").value = meta.description || "";
@@ -264,12 +264,16 @@
   try { previousJob = JSON.parse(previousJobRaw); } catch { previousJob = {id:previousJobRaw,origin:""}; }
   if(previousJob?.id && previousJob.origin === API_BASE) {
     $("resumeJob").style.display = "block";
-    $("resumeJob").addEventListener("click",()=>{
-      if(API_BASE && !$("token").value) return showError(new Error("Renseigne ta clé d’accès pour reprendre le suivi."));
-      poll(previousJob.id);
-    });
     if(!API_BASE) poll(previousJob.id);
   }
+  $("resumeJob").addEventListener("click",()=>{
+    let saved;
+    try { saved = JSON.parse(localStorage.getItem("lastJob") || "null"); }
+    catch { saved = {id:localStorage.getItem("lastJob"),origin:""}; }
+    if(!saved?.id || saved.origin !== API_BASE) return showError(new Error("Montage introuvable sur ce moteur."));
+    if(API_BASE && !$("token").value) return showError(new Error("Renseigne ta clé d’accès pour reprendre le suivi."));
+    poll(saved.id);
+  });
   if("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("./sw.js").catch(()=>{});
   }
