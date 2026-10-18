@@ -160,58 +160,115 @@
     return response.json();
   }
   async function login() {
+    if(API_BASE) {
+      if(!$("token").value) throw new Error("Renseigne la clé d’accès du moteur HTTPS.");
+      return;
+    }
     return request("/api/login", {method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({token:$("token").value})});
   }
-  function selectFile(file) {
-    if(!file) return;
-    if(file.size <= 0) return showError(new Error("Le fichier est vide."));
-    input._selectedFile = file;
-    const amount = file.size >= 1024**3
-      ? (file.size / 1024**3).toFixed(2) + " Go"
-      : (file.size / 1024**2).toFixed(1) + " Mo";
-    $("fileName").textContent = file.name + " · " + amount;
+  const MAX_FILES = 10;
+  let selectedFiles = [];
+  const fileFingerprint = file => [file.name, file.size, file.lastModified].join(":");
+  const readableSize = bytes => bytes >= 1024**3
+    ? (bytes / 1024**3).toFixed(2) + " Go"
+    : (bytes / 1024**2).toFixed(1) + " Mo";
+
+  function selectFiles(items) {
+    const files = Array.from(items || []);
+    if(!files.length) return;
+    if(files.length > MAX_FILES) return showError(new Error("Maximum " + MAX_FILES + " vidéos par montage."));
+    if(files.some(file => file.size <= 0)) return showError(new Error("Un fichier sélectionné est vide."));
+    if(new Set(files.map(fileFingerprint)).size !== files.length)
+      return showError(new Error("Une même vidéo a été choisie plusieurs fois."));
+    selectedFiles = files;
+    $("fileName").textContent = files.length + " vidéo" + (files.length > 1 ? "s" : "")
+      + " · " + readableSize(files.reduce((sum,file)=>sum+file.size, 0));
+    $("selectedList").replaceChildren();
+    files.forEach((file, index) => {
+      const li = document.createElement("li");
+      const number = document.createElement("span");
+      number.className = "rush-no";
+      number.textContent = String(index + 1);
+      const name = document.createElement("span");
+      name.className = "rush-name";
+      name.textContent = file.name;
+      const size = document.createElement("span");
+      size.className = "rush-size";
+      size.textContent = readableSize(file.size);
+      li.append(number, name, size);
+      $("selectedList").append(li);
+    });
+    $("message").className = "muted";
   }
-  input.addEventListener("change", e => selectFile(e.target.files[0]));
-  ["dragenter","dragover"].forEach(name => drop.addEventListener(name,e => {e.preventDefault();drop.classList.add("drag");}));
-  ["dragleave","drop"].forEach(name => drop.addEventListener(name,e => {e.preventDefault();drop.classList.remove("drag");}));
-  drop.addEventListener("drop",e=> selectFile(e.dataTransfer.files[0]));
-  async function upload(file) {
-    let session;
-    try { session = JSON.parse(localStorage.getItem("ongoingUpload") || "null"); } catch {}
-    const fingerprint = [API_BASE, file.name, file.size, file.lastModified].join("|");
-    if(!session || session.fingerprint !== fingerprint) {
+  input.addEventListener("change", e => selectFiles(e.target.files));
+  ["dragenter","dragover"].forEach(name => drop.addEventListener(name,e => {
+    e.preventDefault(); drop.classList.add("drag");
+  }));
+  ["dragleave","drop"].forEach(name => drop.addEventListener(name,e => {
+    e.preventDefault(); drop.classList.remove("drag");
+  }));
+  drop.addEventListener("drop",e => selectFiles(e.dataTransfer.files));
+
+  function loadBatch(files) {
+    const fingerprints = files.map(fileFingerprint);
+    let existing;
+    try { existing = JSON.parse(localStorage.getItem("ongoingMontage") || "null"); } catch {}
+    if(existing && existing.origin === API_BASE &&
+      JSON.stringify(existing.fingerprints) === JSON.stringify(fingerprints)) return existing;
+    const next = {id:crypto.randomUUID(), origin:API_BASE, fingerprints};
+    localStorage.setItem("ongoingMontage", JSON.stringify(next));
+    localStorage.removeItem("ongoingUploads");
+    return next;
+  }
+  function getUploadSessions() {
+    try { return JSON.parse(localStorage.getItem("ongoingUploads") || "{}") || {}; }
+    catch { return {}; }
+  }
+  function setUploadSession(key, session) {
+    const sessions = getUploadSessions();
+    sessions[key] = session;
+    localStorage.setItem("ongoingUploads", JSON.stringify(sessions));
+  }
+  async function upload(file, index, batch, totalSize, precedingBytes) {
+    const key = batch.id + ":" + index;
+    let session = getUploadSessions()[key];
+    if(!session || session.fingerprint !== fileFingerprint(file)) {
       session = await request("/api/uploads", {method:"POST",
-        headers:{"Content-Type":"application/json"},body:JSON.stringify({filename:file.name,size:file.size})});
-      session.fingerprint = fingerprint;
-      localStorage.setItem("ongoingUpload",JSON.stringify(session));
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({filename:file.name,size:file.size})});
+      session.fingerprint = fileFingerprint(file);
+      setUploadSession(key, session);
     }
-    let current = await request("/api/uploads/" + session.id);
-    if(current.status !== "uploading") {
-      if(["queued","processing","done","failed"].includes(current.status)) {
-        return {id:session.id,alreadyStarted:true};
-      }
-      throw new Error("État de transfert inconnu : " + current.status);
-    }
-    let offset = current.offset, attempts = 0;
+    const current = await request("/api/uploads/" + session.id);
+    if(current.status === "consumed") return session.id;
+    if(current.status !== "uploading")
+      throw new Error("Vidéo déjà associée à un autre montage. Recharge la page et recommence.");
+    let offset = current.offset;
+    let attempts = 0;
     while(offset < file.size) {
       const chunk = file.slice(offset, Math.min(offset + 8 * 1024 * 1024, file.size));
       try {
         const state = await request("/api/uploads/" + session.id, {method:"PATCH",
-          headers:{"Upload-Offset":String(offset),"Content-Type":"application/octet-stream"},body:chunk});
+          headers:{"Upload-Offset":String(offset),"Content-Type":"application/octet-stream"},
+          body:chunk});
         offset = state.offset;
         attempts = 0;
       } catch(error) {
-        if(++attempts > 6) throw new Error("Envoi interrompu : reviens sur ce site et resélectionne la même vidéo pour reprendre. " + error.message);
+        if(++attempts > 6)
+          throw new Error("Transfert interrompu. Resélectionne les mêmes vidéos pour reprendre. " + error.message);
         await new Promise(resolve => setTimeout(resolve, Math.min(8000, 500 * 2 ** attempts)));
-        current = await request("/api/uploads/" + session.id);
-        offset = current.offset;
+        const fresh = await request("/api/uploads/" + session.id);
+        if(fresh.status !== "uploading")
+          throw new Error("Le transfert a changé d’état. Retrouve ton montage depuis le bouton dédié.");
+        offset = fresh.offset;
       }
-      progress(offset / file.size * .5, "Transfert des rushs", (offset/1024**3).toFixed(2) + " / " + (file.size/1024**3).toFixed(2) + " Go");
+      const amount = precedingBytes + offset;
+      progress(amount / totalSize * .5, "Envoi des vidéos",
+        "Vidéo " + (index + 1) + "/" + selectedFiles.length + " : "
+        + readableSize(amount) + " / " + readableSize(totalSize));
     }
-    // Keep the session until /complete succeeds: closing Chrome at the
-    // end of an upload must not strand an unstarted job.
-    return {id:session.id,alreadyStarted:false};
+    return session.id;
   }
   async function poll(id) {
     clearTimeout(pollTimer);
