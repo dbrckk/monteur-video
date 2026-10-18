@@ -6,13 +6,13 @@ Application web **locale** construite pour produire de vrais montages à partir 
 
 ## Site web gratuit — Android / smartphone
 
-**Nouvelle interface multi-vidéo avec filtres : https://snappy-gate-x58qpre.shipstatic.com** (ancien site conservé : https://angled-gate-srzt937.shipstatic.com). (hébergement statique gratuit avec déploiement connecté sans date d'expiration indiquée). GitHub Pages reste une seconde adresse possible après activation des Pages dans les paramètres du dépôt.
+**Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.
 
 **Important :** les deux hébergeurs statiques ne peuvent pas traiter des vidéos. Il reste à connecter un moteur de montage HTTPS.
 
 
 
-L'interface statique est prévue sur **https://dbrckk.github.io/monteur-video/** avec publication automatique par GitHub Pages, après activation de Pages dans les réglages du dépôt. Elle peut s'ajouter à l'écran d'accueil Android (PWA).
+L'interface statique est **déjà publiée sur https://dbrckk.github.io/monteur-video/** et est compatible Android (installation facultative sur l'écran d'accueil). Elle peut s'ajouter à l'écran d'accueil Android (PWA).
 
 **Parcours smartphone :** sélectionner simultanément jusqu'à 10 vidéos dans la galerie Android, les envoyer une à une par blocs reprenables, puis produire **un seul MP4** incluant des moments de chaque rush. Laisser l'onglet ouvert durant l'envoi ; le traitement continue côté serveur après fermeture. Lorsque le montage est disponible, choisir parmi les filtres recommandés selon le thème (fitness, motivation, sport, lifestyle), appliquer celui souhaité sans perdre le master original, puis télécharger la version choisie sur le téléphone.
 
