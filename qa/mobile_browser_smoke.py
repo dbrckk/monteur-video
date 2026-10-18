@@ -43,6 +43,15 @@ def main() -> None:
             errors = []
             page.on("pageerror", lambda exc: errors.append(str(exc)))
             page.goto(url, wait_until="domcontentloaded")
+            # Fail fast on wrong API origin or unavailable backend instead of
+            # waiting three minutes for a hidden preview.
+            configured_api = page.evaluate("() => localStorage.getItem('backendUrl')")
+            assert not configured_api, f"CI must use same-origin API: {configured_api}"
+            health = page.request.get(url.rstrip("/") + "/api/health")
+            assert health.ok, f"Local backend health failed: {health.status}"
+            page.on("requestfailed", lambda req: print(
+                "BROWSER REQUEST FAILED:", req.method, req.url, req.failure))
+
             expect(page.locator("#video")).to_have_attribute("multiple", "")
             page.locator("#video").set_input_files([str(a), str(b)])
             expect(page.locator("#selectedList li")).to_have_count(2)
@@ -53,7 +62,12 @@ def main() -> None:
             # Test only the real HTTP API, no mocked frontend/network requests.
             page.locator("#seconds").select_option("30")
             page.locator("#start").click()
-            expect(page.locator("#preview")).to_be_visible(timeout=180_000)
+            try:
+                expect(page.locator("#preview")).to_be_visible(timeout=180_000)
+            except AssertionError:
+                print("UI stage:", page.locator("#stage").inner_text())
+                print("UI status:", page.locator("#status").inner_text() if page.locator("#status").count() else "n/a")
+                raise
             expect(page.locator("#resultVideo")).to_have_attribute("src", re.compile(r"/download"))
             expect(page.locator("#filterOptions button")).to_have_count(7)
             expect(page.locator("#metadata")).to_be_visible()
