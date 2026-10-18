@@ -52,8 +52,8 @@ class MusicJobTests(unittest.TestCase):
                 self.assertEqual(data["metadata"]["soundtrack"]["origin"],
                                  "original_generated")
                 self.assertEqual(data["metadata"]["soundtrack"]["original_audio_volume"], 0)
-                self.assertEqual(data["metadata"]["cut_style"] if "cut_style" in data["metadata"]
-                                 else data["metadata"]["source_count"], 1)
+                self.assertEqual(data["metadata"]["cut_style"], "beat_synced")
+                self.assertEqual(data["metadata"]["source_count"], 1)
                 mp4 = Path(root) / job_id / "final.mp4"
                 self.assertTrue(mp4.is_file())
                 self.assertGreater(mp4.stat().st_size, 10000)
