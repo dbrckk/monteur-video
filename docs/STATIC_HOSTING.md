@@ -1,14 +1,10 @@
 # Site statique gratuit : Android en priorité
 
-**Nouvelle version en ligne vérifiée :** https://snappy-gate-x58qpre.shipstatic.com (1 à 10 vidéos et filtres après montage)
+**Site principal gratuit en ligne et vérifié :** https://dbrckk.github.io/monteur-video/ (1 à 10 vidéos, choix de l'ordre et filtres après montage).
 
-**Ancienne version :** https://angled-gate-srzt937.shipstatic.com
+**Miroir gratuit :** https://snappy-gate-x58qpre.shipstatic.com
 
-**GitHub Pages (en attente d'activation) :** https://dbrckk.github.io/monteur-video/
-
-Le premier workflow GitHub Pages a échoué lors de `actions/configure-pages`, car Pages n'est pas activé dans les réglages du dépôt. L'hébergement statique ShipStatic connecté rend dès maintenant l'interface accessible, gratuitement. Le moteur distant HTTPS reste indispensable pour réellement traiter les vidéos.
-
-GitHub Actions publie le dossier `web/` sur GitHub Pages à chaque changement de `main`. Dans **Settings > Pages > Build and deployment**, sélectionner **GitHub Actions** comme source, si nécessaire. La mise en ligne effective dépend de l'activation Pages et de la réussite du workflow « Publish static studio » : ne pas confondre URL prévue et site déjà publié.
+GitHub Pages est désormais activé et sert le dossier `web/` depuis GitHub Actions. Le workflow de publication vérifie automatiquement l'activation de Pages avant de déployer, afin de ne pas échouer lors d'une désactivation accidentelle. Le moteur distant HTTPS reste indispensable pour réellement traiter les vidéos.
 
 ## Utilisation sur smartphone
 
