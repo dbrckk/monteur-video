@@ -76,3 +76,28 @@ def clip_quality(samples: list[VisualSample], start: float, end: float) -> tuple
     detail = sum(min(x.detail, 48) for x in window) / len(window)
     bonus = min(2.4, motion / 5.5) + min(1.1, detail / 26) - 6 * blank
     return round(bonus, 3), blank >= 0.6 and len(window) >= 2
+
+def usable_ranges(samples: list[VisualSample], duration: float) -> list[tuple[float, float]]:
+    """Only include visible footage, preserving silent workouts and static camera shots."""
+    if not samples:
+        return []
+    intervals: list[tuple[float, float]] = []
+    start: float | None = None
+    last = 0.0
+    for sample in samples:
+        visible = (25 <= sample.luminance <= 230 and
+                   (sample.detail >= 2 or sample.motion >= 0.35))
+        if visible:
+            if start is None:
+                start = sample.time
+            last = sample.time
+        elif start is not None:
+            end = min(duration, sample.time)
+            if end - start >= 1:
+                intervals.append((start, end))
+            start = None
+    if start is not None:
+        end = min(duration, max(last + 0.5, duration if duration - last < 1.0 else last + 0.5))
+        if end - start >= 1:
+            intervals.append((start, end))
+    return intervals
