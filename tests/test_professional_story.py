@@ -45,6 +45,22 @@ class ColorConsistencyTests(unittest.TestCase):
         self.assertNotEqual(filters[0], filters[1])
         self.assertTrue(all("colorbalance=" in f for f in filters))
 
+    def test_shared_white_balance_applies_across_different_camera_rushes(self):
+        from editor import Clip
+        from color_grade import adaptive_shot_filters
+        first = samples(105, u=114, v=144)
+        second = samples(105, u=140, v=114)
+        reference = grade_plan([first, second], "fitness")
+        self.assertIn("target_u", reference)
+        self.assertIn("target_v", reference)
+        filter_a = adaptive_shot_filters(first, [Clip(0, 4, 1)],
+                                         "fitness", reference, 0)[0]
+        filter_b = adaptive_shot_filters(second, [Clip(0, 4, 1)],
+                                         "fitness", reference, 1)[0]
+        self.assertNotEqual(filter_a, filter_b)
+        self.assertIn("colorbalance=rs=-", filter_a)
+        self.assertIn("colorbalance=rs=0.", filter_b)
+
     def test_shot_grade_uses_fallback_without_valid_samples(self):
         from editor import Clip
         from color_grade import adaptive_shot_filters
