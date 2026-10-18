@@ -433,14 +433,22 @@ async def append_chunk(ident: str, request: Request):
 @app.post("/api/uploads/{ident}/complete", dependencies=[Depends(authorize)])
 def complete_upload(ident: str, data: ExportRequest):
     job = get_job(ident)
-    if job["status"] != "uploading":
-        raise HTTPException(status_code=409, detail="Fichier déjà validé")
     if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"}:
         raise HTTPException(status_code=422, detail="Configuration inconnue")
-    if source_path(job["id"]).stat().st_size != job["expected_size"]:
-        raise HTTPException(status_code=409, detail="Fichier incomplet")
-    update_job(job["id"], status="queued", stage="queued",
-               options=data.model_dump_json())
+    # Prevent two clients finishing the same upload simultaneously.
+    with database() as con:
+        con.execute("BEGIN IMMEDIATE")
+        current = con.execute("SELECT status,expected_size FROM jobs WHERE id=?",
+                              (job["id"],)).fetchone()
+        if current is None or current["status"] != "uploading":
+            raise HTTPException(status_code=409, detail="Fichier déjà validé")
+        source = source_path(job["id"])
+        if not source.is_file() or source.stat().st_size != current["expected_size"]:
+            raise HTTPException(status_code=409, detail="Fichier incomplet")
+        con.execute("UPDATE jobs SET status='queued',stage='queued', options=?,"
+                    "updated_at=? WHERE id=?",
+                    (data.model_dump_json(), datetime.now(timezone.utc).isoformat(),
+                     job["id"]))
     POOL.submit(run_job, job["id"])
     return {"id": job["id"], "status": "queued"}
 
@@ -509,6 +517,31 @@ def job_status(ident: str):
             "status": data["status"], "stage": data["stage"],
             "progress": data["progress"], "error": data["error"],
             "metadata": json.loads(data["metadata"]) if data["metadata"] else None}
+
+
+@app.post("/api/jobs/{ident}/retry", dependencies=[Depends(authorize)])
+def retry_failed_job(ident: str):
+    """Re-queue an unsuccessful render without requiring a fresh smartphone upload."""
+    job = get_job(ident)
+    with database() as con:
+        con.execute("BEGIN IMMEDIATE")
+        current = con.execute(
+            "SELECT status,options FROM jobs WHERE id=?", (job["id"],)).fetchone()
+        if current is None or current["status"] != "failed" or not current["options"]:
+            raise HTTPException(status_code=409, detail="Montage non relançable")
+        options = json.loads(current["options"])
+        sources = options.get("sources", [job["id"]])
+        for source_id in sources:
+            if not source_path(source_id).is_file():
+                raise HTTPException(
+                    status_code=409,
+                    detail="Rush source manquant : nouvelle importation nécessaire")
+        con.execute(
+            "UPDATE jobs SET status='queued',stage='queued',progress=0,"
+            "error=NULL,metadata=NULL,updated_at=? WHERE id=?",
+            (datetime.now(timezone.utc).isoformat(), job["id"]))
+    POOL.submit(run_job, job["id"])
+    return {"id": job["id"], "status": "queued"}
 
 
 @app.get("/api/jobs/{ident}/filters", dependencies=[Depends(authorize)])
