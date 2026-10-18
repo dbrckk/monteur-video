@@ -132,7 +132,7 @@
 </main>
 <script>
 (() => {
-  const $ = id => document.getElementById(id); const API_BASE = (localStorage.getItem("backendUrl") || "").replace(/\/$/, ""); const apiPath = path => API_BASE + path;
+  const $ = id => document.getElementById(id); const API_BASE = (localStorage.getItem("backendUrl") || "https://monteur-video-beta.onrender.com").replace(/\/$/, ""); const apiPath = path => API_BASE + path;
   const drop = $("drop"), input = $("video"), button = $("start");
   let pollTimer;
   let pollFailures = 0;
