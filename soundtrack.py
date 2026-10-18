@@ -72,7 +72,8 @@ def beat_duration(theme: str) -> float:
     return 60.0 / TRACKS.get(theme, TRACKS["auto"])["bpm"]
 
 
-def create_original_beat(theme: str, destination: Path, bars: int = 8) -> dict:
+def create_original_beat(theme: str, destination: Path, bars: int = 8,
+                         music_profile: dict | None = None) -> dict:
     """Generate an original 8-bar drum+bass+lead loop in memory-limited PCM.
 
     A loop lasts 13–17 seconds and is repeated seamlessly while exporting the
@@ -80,12 +81,14 @@ def create_original_beat(theme: str, destination: Path, bars: int = 8) -> dict:
     """
     if bars < 2 or bars > 16:
         raise ValueError("Nombre de mesures invalide")
-    preset = TRACKS.get(theme, TRACKS["auto"])
+    preset = {**TRACKS.get(theme, TRACKS["auto"]), **(music_profile or {})}
     beat = 60.0 / preset["bpm"]
     length = bars * 4 * beat
     count = math.ceil(length * SAMPLE_RATE)
     pcm = array("f", [0.0]) * count
     rng = random.Random(0x4D4F4E54 + preset["bpm"])
+    intensity = {"low": 0.63, "medium": 0.83, "high": 1.0}.get(
+        preset.get("energy", "medium"), 0.83)
 
     def add_kick(start: float, intensity: float = 1.0) -> None:
         offset = round(start * SAMPLE_RATE)
@@ -142,14 +145,14 @@ def create_original_beat(theme: str, destination: Path, bars: int = 8) -> dict:
         for pulse in range(4):
             at = start + pulse * beat
             if pulse in (0, 2) or (bar >= 4 and pulse == 3):
-                add_kick(at, 1.0 if pulse == 0 else 0.84)
+                add_kick(at, intensity * (1.0 if pulse == 0 else 0.84))
             if pulse in (1, 3):
-                add_snare(at, 0.91)
-            add_hat(at, 0.68 if pulse % 2 == 0 else 0.48)
-            add_hat(at + beat / 2, 0.44 + (0.14 if bar >= 4 else 0))
-            add_bass(at, beat * 0.78, root * 2 ** (bass_semitones[pulse] / 12))
+                add_snare(at, intensity * 0.91)
+            add_hat(at, intensity * (0.68 if pulse % 2 == 0 else 0.48))
+            add_hat(at + beat / 2, intensity * (0.44 + (0.14 if bar >= 4 else 0)))
+            add_bass(at, beat * 0.78, root * 2 ** (bass_semitones[pulse] / 12), intensity)
         if bar % 2 == 1:
-            add_kick(start + 3.5 * beat, 0.62)
+            add_kick(start + 3.5 * beat, 0.62 * intensity)
         for position, interval in ((0, 12), (1.5, 15), (2.5, 19)):
             add_lead(start + position * beat, root * 2 ** (interval / 12),
                      beat * 0.83)
@@ -166,13 +169,16 @@ def create_original_beat(theme: str, destination: Path, bars: int = 8) -> dict:
                                              *(int(max(-1.0, min(1.0, x * scale)) * 32767)
                                                for x in block)))
         stream.writeframes(b"")
-    return {"title": preset["name"], "style": preset["style"], "bpm": preset["bpm"],
+    return {"title": preset.get("title", preset["name"]), "style": preset["style"], "bpm": preset["bpm"],
+            "energy": preset.get("energy", "medium"),
+            "selection_method": preset.get("selection_method", "theme_fallback"),
             "origin": "original_generated", "copyright": "original_instrumental",
             "loop_seconds": round(length, 3)}
 
 
 def add_soundtrack(video: Path, theme: str, *, sound_mode: str = "auto",
                    voice_present: bool = False,
+                   music_profile: dict | None = None,
                    progress: Callable[[float, str], None] | None = None) -> dict:
     """Mix generated royalty-free music continuously over the assembled video.
 
@@ -189,7 +195,7 @@ def add_soundtrack(video: Path, theme: str, *, sound_mode: str = "auto",
     mixed = video.with_name(video.stem + ".music.partial.mp4")
     mixed.unlink(missing_ok=True)
     try:
-        info = create_original_beat(theme, loop_file)
+        info = create_original_beat(theme, loop_file, music_profile=music_profile)
         duration = master_info["duration"]
         if progress:
             progress(0.95, "music")
