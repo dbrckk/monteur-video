@@ -257,6 +257,9 @@ def run_job(ident: str) -> None:
     job = get_job(ident)
     folder = ROOT / ident
     settings = json.loads(job["options"])
+    render_size = int(os.environ.get("MONTEUR_RENDER_SIZE", "1080"))
+    if render_size not in (360, 480, 720, 1080):
+        raise ValueError("MONTEUR_RENDER_SIZE must be 360, 480, 720 or 1080")
     try:
         update_job(ident, status="processing", stage="probe", progress=0.01)
         progress = lambda value, stage: update_job(
@@ -275,13 +278,13 @@ def run_job(ident: str) -> None:
                 theme=settings["theme"], aspect=settings["aspect"],
                 target_seconds=settings["seconds"],
                 source_names=[names[src] for src in sources],
-                progress=progress,
+                size=render_size, progress=progress,
             )
         else:
             result = edit_video(source_path(ident), folder / "final.mp4",
                                 theme=settings["theme"], aspect=settings["aspect"],
                                 target_seconds=settings["seconds"],
-                                progress=progress)
+                                size=render_size, progress=progress)
         (folder / "metadata.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         # Delete only temporary re-encoded segments: raw source remains for re-use.
