@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Callable, Sequence
 
-from editor import THEMES, edit_video, execute, probe_media, social_metadata
+from editor import THEMES, detect_scenes, edit_video, execute, probe_media, social_metadata
 
 MAX_SOURCES = 10
 FILTER_PRESETS = {
@@ -72,11 +72,14 @@ def filter_catalog(theme: str) -> list[dict]:
              "recommended": key in suggested} for key in keys]
 
 
-def automatic_duration(durations: Sequence[float]) -> int:
+def automatic_duration(durations: Sequence[float], scene_counts: Sequence[int] | None = None) -> int:
     """Choose a short-form target without padding or inventing missing footage."""
     if not durations or any(not math.isfinite(d) or d < 1 for d in durations):
         raise ValueError("Sources vidéo invalides")
     available = sum(durations)
+    if scene_counts is not None and (len(scene_counts) != len(durations) or
+                                     any(n < 0 for n in scene_counts)):
+        raise ValueError("Analyse des scènes incohérente")
     if available < 10:
         return 10  # Final export naturally stops at available source duration.
     if available < 20:
@@ -84,10 +87,21 @@ def automatic_duration(durations: Sequence[float]) -> int:
     if available < 35:
         return 15
     if available < 70:
-        return 30
-    if available < 110:
-        return 45
-    return 60
+        baseline = 30
+    elif available < 110:
+        baseline = 45
+    else:
+        baseline = 60
+    # Strong visual edit evidence supports a compact, high-energy reel.
+    # Static gym footage can still contain useful action, so never shorten it
+    # merely because the camera stays fixed.
+    if scene_counts is not None and available >= 35:
+        cuts_per_minute = sum(scene_counts) * 60 / available
+        if cuts_per_minute >= 18:
+            return min(baseline, 15)
+        if cuts_per_minute >= 9:
+            return min(baseline, 30)
+    return baseline
 
 
 def allocation(durations: Sequence[float], requested: int) -> list[float]:
@@ -132,14 +146,20 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         raise ValueError("Nombre de noms incohérent")
     # Inspect each file before any expensive rendering.
     info = [probe_media(Path(source)) for source in sources]
-    if target_seconds == 0:
-        target_seconds = automatic_duration([item["duration"] for item in info])
+    auto_mode = target_seconds == 0
+    scene_cache = ([detect_scenes(Path(src), item["duration"])
+                    for src, item in zip(sources, info)] if auto_mode else None)
+    if auto_mode:
+        target_seconds = automatic_duration([item["duration"] for item in info],
+                                            [len(s) for s in scene_cache])
     budgets = allocation([item["duration"] for item in info], target_seconds)
     if len(sources) == 1:
         result = edit_video(Path(sources[0]), destination, theme=theme, aspect=aspect,
                             target_seconds=target_seconds, transcribe=transcribe,
-                            size=size, progress=progress)
+                            size=size, progress=progress,
+                            detected_scenes=scene_cache[0] if scene_cache is not None else None)
         result["target_duration_seconds"] = target_seconds
+        result["duration_mode"] = "auto" if auto_mode else "manual"
         result["source_count"] = 1
         result["sources"] = [{
             "index": 0, "name": source_names[0] if source_names else Path(sources[0]).name,
@@ -163,6 +183,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             Path(source), part, theme=theme, aspect=aspect,
             target_seconds=budget, transcribe=transcribe, size=size,
             allow_short=True,
+            detected_scenes=scene_cache[i] if scene_cache is not None else None,
             progress=(lambda p, stage, i=i: progress(
                 min(0.91, 0.02 + (i + p) / len(sources) * 0.88), stage))
             if progress else None,
@@ -189,6 +210,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
     output.update({
         "aspect": aspect,
         "target_duration_seconds": target_seconds,
+        "duration_mode": "auto" if auto_mode else "manual",
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
         "sources": details,
