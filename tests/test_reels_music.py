@@ -94,6 +94,35 @@ class ChartParserTests(unittest.TestCase):
         self.assertTrue(result["selected"]["open_url"].startswith(
             "https://www.instagram.com/reels/audio/"))
 
+    def test_verified_tempo_ranks_compatible_music_above_otherwise_equal_track(self):
+        candidates = [
+            {"title": "Workout", "artist": "Artist", "bpm": 98, "source_url": "https://soundmatcha.com/sound/one/"},
+            {"title": "Workout", "artist": "Artist", "bpm": 150, "source_url": "https://soundmatcha.com/sound/two/"},
+            {"title": "Workout", "artist": "Artist", "bpm": 75, "source_url": "https://soundmatcha.com/sound/three/"},
+        ]
+        with patch.object(reels_music, "_chart_cached", return_value=tuple(candidates)):
+            with patch.object(reels_music, "_instagram_url", return_value=None):
+                result = reels_music.recommend_reels_audio(
+                    "fitness", {"energy": "high", "bpm": 150}, limit=3)
+        self.assertEqual(result["selected"]["bpm"], 150)
+        self.assertTrue(result["selected"]["tempo_match_verified"])
+        self.assertEqual(result["target_bpm"], 150)
+
+    def test_half_time_and_double_time_are_compatible(self):
+        self.assertGreater(reels_music._tempo_fit(75, 150), 2.9)
+        self.assertGreater(reels_music._tempo_fit(150, 150), 2.9)
+        self.assertEqual(reels_music._verified_bpm({"bpm": "unknown"}), None)
+        self.assertEqual(reels_music._verified_bpm({"bpm": True}), None)
+        self.assertEqual(reels_music._verified_bpm({"bpm": 999}), None)
+
+    def test_unverified_tempo_does_not_claim_music_match(self):
+        with patch.object(reels_music, "_fetch_public_page", side_effect=OSError("offline")):
+            result = reels_music.recommend_reels_audio(
+                "fitness", {"energy": "high", "bpm": 154})
+        self.assertIsNone(result["selected"]["bpm"])
+        self.assertFalse(result["selected"]["tempo_match_verified"])
+        self.assertEqual(result["target_bpm"], 154)
+
     def test_no_arbitrary_page_fetch(self):
         with self.assertRaises(ValueError):
             reels_music._fetch_public_page("http://127.0.0.1:8000/api/jobs")

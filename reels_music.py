@@ -168,7 +168,31 @@ def _instagram_url(source_url: str) -> str | None:
         return None
 
 
-def _score(item: dict, energy: str, index: int, vocals: str) -> float:
+def _verified_bpm(item: dict) -> float | None:
+    """Use only externally supplied, plausible BPM; never guess from title."""
+    value = item.get("bpm")
+    if isinstance(value, bool):
+        return None
+    try:
+        bpm = float(value)
+    except (ValueError, TypeError):
+        return None
+    return bpm if math.isfinite(bpm) and 55 <= bpm <= 210 else None
+
+
+def _tempo_fit(track_bpm: float | None, video_bpm: float | None) -> float:
+    """Half/double-time beats can both align with a cut grid."""
+    if track_bpm is None or video_bpm is None:
+        return 0.0
+    if video_bpm <= 0:
+        return 0.0
+    distances = [abs(math.log2(track_bpm / (video_bpm * factor)))
+                 for factor in (0.5, 1.0, 2.0)]
+    return round(3.0 * max(0.0, 1.0 - min(distances) / 0.20), 4)
+
+
+def _score(item: dict, energy: str, index: int, vocals: str,
+           video_bpm: float | None = None) -> float:
     # Chart rank and visible artistic clues; BPM/lyrics are NOT fabricated.
     title = item["title"].lower()
     artist = item["artist"].lower()
@@ -188,7 +212,7 @@ def _score(item: dict, energy: str, index: int, vocals: str) -> float:
         weight -= 1.2
     if vocals == "vocals" and item.get("vocals") == "instrumental":
         weight -= 3
-    if artist in {"unknown", "original audio"}:
+    weight += _tempo_fit(_verified_bpm(item), video_bpm)\n    if artist in {"unknown", "original audio"}:
         weight -= 0.8
     return round(weight, 4)
 
@@ -202,7 +226,7 @@ def recommend_reels_audio(theme: str, profile: dict | None = None,
     """
     if vocals not in {"any", "instrumental", "vocals"}:
         raise ValueError("Préférence musicale inconnue")
-    energy = (profile or {}).get("energy", "medium")
+    energy = (profile or {}).get("energy", "medium")\n    video_bpm = _verified_bpm(profile or {})
     if energy not in {"low", "medium", "high"}:
         energy = "medium"
     route = CHARTS.get(theme, CHARTS["auto"])
@@ -217,11 +241,11 @@ def recommend_reels_audio(theme: str, profile: dict | None = None,
         catalog = [dict(item) for item in FALLBACK]
         catalog_source = "curated_fallback"
     ranked = sorted(enumerate(catalog), key=lambda pair:
-                    (-_score(pair[1], energy, pair[0], vocals), pair[0]))
+                    (-_score(pair[1], energy, pair[0], vocals, video_bpm), pair[0]))
     output = []
     for index, entry in ranked:
         candidate = dict(entry)
-        candidate["score"] = _score(entry, energy, index, vocals)
+        candidate["score"] = _score(entry, energy, index, vocals, video_bpm)\n        candidate["bpm"] = _verified_bpm(entry)\n        candidate["tempo_match_verified"] = candidate["bpm"] is not None and video_bpm is not None
         candidate["reels_rank"] = candidate.pop("rank", index + 1)
         candidate["url"] = candidate.get("url") or _instagram_url(candidate["source_url"])
         # If Instagram temporarily throttles metadata, the cited source page
@@ -233,7 +257,7 @@ def recommend_reels_audio(theme: str, profile: dict | None = None,
     return {
         "selected": output[0] if output else None,
         "alternatives": output[1:],
-        "visual_energy": energy,
+        "visual_energy": energy,\n        "target_bpm": video_bpm,\n        "matching_factors": ["video_motion", "scene_density", "reels_theme",\n                             "chart_rank", "vocal_preference",\n                             "verified_tempo_when_available"],
         "matching": "video_motion_and_similar_reels_category",
         "source": "SoundMatcha public Instagram Reels audio charts",
         "catalog_status": catalog_source,
@@ -241,5 +265,6 @@ def recommend_reels_audio(theme: str, profile: dict | None = None,
         "audio_automatically_embedded": False,
         "application": "Add the selected track inside Instagram when publishing",
         "availability_and_license": "Check Instagram account, territory, personal/commercial use",
-        "note": "Track tempo and presence of vocals not verified unless explicitly labeled."
+        "note": "Track BPM and vocals are unknown unless independently verified. "
+                "The visual BPM is a montage target, not an observed song tempo."
     }
