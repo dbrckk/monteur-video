@@ -177,7 +177,7 @@ class LoginRequest(BaseModel):
 class ExportRequest(BaseModel):
     theme: str = "fitness"
     aspect: str = "vertical"
-    seconds: int = Field(default=45, ge=10, le=180)
+    seconds: int = Field(default=0, ge=0, le=180)
 
 
 class MontageRequest(ExportRequest):
