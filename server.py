@@ -33,6 +33,8 @@ UPLOAD_TTL_HOURS = max(1, int(os.environ.get("UPLOAD_TTL_HOURS", "72")))
 RESULT_TTL_DAYS = max(1, int(os.environ.get("RESULT_TTL_DAYS", "14")))
 CLEANUP_INTERVAL_SECONDS = 6 * 3600
 API_TOKEN = os.environ.get("APP_API_TOKEN", "")
+PUBLIC_DEMO = os.environ.get("MONTEUR_PUBLIC_DEMO", "0") == "1"
+PUBLIC_MAX_ACTIVE = max(1, int(os.environ.get("MONTEUR_PUBLIC_MAX_ACTIVE", "3")))
 COOKIE_VALUE = hmac.new(API_TOKEN.encode(), b"monteur-session-v1", hashlib.sha256).hexdigest()
 DOWNLOAD_SECRET = hmac.new(API_TOKEN.encode(), b"monteur-download-v1", hashlib.sha256).digest()
 DOWNLOAD_TTL_SECONDS = 15 * 60
@@ -192,6 +194,11 @@ def authorize(request: Request) -> None:
 
     CORS never grants access to an untrusted origin; requests still require the secret.
     """
+    if PUBLIC_DEMO and not API_TOKEN:
+        origin = request.headers.get("origin", "")
+        if origin and origin not in CORS_ORIGINS and origin not in {"http://localhost:8000", "http://127.0.0.1:8000"}:
+            raise HTTPException(status_code=403, detail="Origine non autorisée")
+        return
     if not API_TOKEN:
         # Never permit the public static site to send cross-origin uploads
         # to an accidentally unauthenticated local installation.
@@ -385,6 +392,11 @@ def begin_upload(data: UploadRequest):
         raise HTTPException(status_code=413, detail="Fichier trop volumineux pour la limite configurée")
     if data.size > shutil.disk_usage(ROOT).free * 0.7:
         raise HTTPException(status_code=507, detail="Espace disque insuffisant")
+    if PUBLIC_DEMO:
+        with database() as con:
+            active = con.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('uploading','queued','processing')").fetchone()[0]
+        if active >= PUBLIC_MAX_ACTIVE:
+            raise HTTPException(status_code=429, detail="Service occupé, réessayer plus tard")
     ident = str(uuid.uuid4())
     folder = ROOT / ident
     folder.mkdir(mode=0o700)
