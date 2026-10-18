@@ -9,6 +9,8 @@ from __future__ import annotations
 import math
 import os
 import hashlib
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -187,23 +189,68 @@ def narrative_order(sources: Sequence[Path], samples: Sequence[list]) -> list[in
     return [ranked[0], *ranked[2:], ranked[1]]
 
 
-def chronological_order(sources: Sequence[Path], samples: Sequence[list],
-                        info: Sequence[dict]) -> tuple[list[int], str]:
-    """Preserve actual camera chronology only if every rush has reliable UTC time.
+def _filename_capture_time(name: str) -> str | None:
+    """Use only explicit camera timestamp filenames; never file upload/modification time.
 
-    A partial set of capture dates is not enough to reconstruct the timeline.
-    When unavailable, a deterministic visual-energy progression is preferred
-    over misleading Android upload-order or modified-time guesses.
+    Camera formats such as VID_20260803_143012 and PXL_20260803_143012
+    are local wall-clock time, so only used when every source has the same
+    filename-derived convention. Do not mix these with UTC camera tags.
+    """
+    name = Path(name).name
+    match = re.search(r"(?:^|[_-])(?:VID|PXL|IMG|MVIMG)[_-]?(20\\d{2})([01]\\d)([0-3]\\d)[_-]([0-2]\\d)([0-5]\\d)([0-5]\\d)(?:[_\\.-]|$)",
+                      name, re.I)
+    if not match:
+        return None
+    try:
+        return datetime(*(int(x) for x in match.groups())).isoformat()
+    except ValueError:
+        return None
+
+
+def chronological_order(sources: Sequence[Path], samples: Sequence[list],
+                        info: Sequence[dict],
+                        source_names: Sequence[str] | None = None) -> tuple[list[int], str]:
+    """Keep trustworthy capture anchors; infer only the gaps between them.
+
+    Filename capture dates are accepted only when ALL rushes use recognizable
+    camera filename conventions and there are no timezone-aware tags, avoiding
+    unsafe comparisons between local wall time and UTC. Unknown shots are
+    inserted into the visual story but never reorder known chronological anchors.
     """
     if len(sources) != len(info) or len(sources) != len(samples):
         raise ValueError("Métadonnées chronologiques incohérentes")
+    names = source_names or [Path(p).name for p in sources]
+    if len(names) != len(sources):
+        raise ValueError("Noms de sources chronologiques incohérents")
     timestamps = [item.get("captured_at") for item in info]
-    if timestamps and len(set(timestamps)) > 1 and all(
-            isinstance(x, str) and x for x in timestamps):
-        return sorted(range(len(sources)),
-                      key=lambda i: (timestamps[i], _content_fingerprint(sources[i]))), "capture_time"
+    if not any(timestamps):
+        filename_times = [_filename_capture_time(name) for name in names]
+        if all(filename_times) and len(set(filename_times)) > 1:
+            return sorted(range(len(sources)), key=lambda i:
+                          (filename_times[i], _content_fingerprint(sources[i]))), "camera_filename_time"
+    hashes = [_content_fingerprint(source) for source in sources]
+    known = [i for i, value in enumerate(timestamps) if isinstance(value, str) and value]
+    if len(known) >= 2 and len({timestamps[i] for i in known}) > 1:
+        anchors = sorted(known, key=lambda i: (timestamps[i], hashes[i]))
+        if len(known) == len(sources):
+            return anchors, "capture_time"
+        # With partial capture dates, preserve all anchored order and place
+        # unanchored shots in stable visual-energy positions. This is a story
+        # approximation, explicitly distinguished from recovered chronology.
+        visual = narrative_order(sources, samples)
+        positions = {index: pos for pos, index in enumerate(visual)}
+        remaining = [i for i in visual if i not in known]
+        slots = [[] for _ in range(len(anchors) + 1)]
+        for index in remaining:
+            slot = sum(positions[anchor] < positions[index] for anchor in anchors)
+            slots[slot].append(index)
+        assembled = []
+        for k, anchor in enumerate(anchors):
+            assembled.extend(slots[k])
+            assembled.append(anchor)
+        assembled.extend(slots[-1])
+        return assembled, "capture_anchors_visual_gaps"
     return narrative_order(sources, samples), "energy_arc_no_reliable_timestamps"
-
 
 def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitness",
               aspect: str = "vertical", target_seconds: int = 45,
@@ -256,7 +303,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
     grades = grade_plan(quality_cache, theme)
     budgets = allocation([item["duration"] for item in info], target_seconds)
     order, sequence_strategy = chronological_order(
-        [Path(source) for source in sources], quality_cache, info)
+        [Path(source) for source in sources], quality_cache, info, source_names)
     if progress:
         progress(0.32, "story")
     if len(sources) == 1:
