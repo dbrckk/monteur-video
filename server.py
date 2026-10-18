@@ -13,7 +13,6 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from time import time
-from urllib.parse import quote
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
