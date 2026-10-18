@@ -108,7 +108,7 @@ class ChronologyTests(unittest.TestCase):
             order, method = chronological_order(
                 paths, [samples(1), samples(8), samples(4)],
                 [{"captured_at":"2026-01-01T12:00:00+00:00"} for _ in paths])
-            self.assertEqual(method, "energy_arc_no_reliable_timestamps")
+            self.assertEqual(method, "visual_continuity_no_reliable_timestamps")
             self.assertEqual(sorted(order), [0, 1, 2])
 
     def test_android_camera_filenames_reconstruct_order(self):
@@ -149,7 +149,7 @@ class ChronologyTests(unittest.TestCase):
                                                    {"captured_at":"2026-05-01T09:00:00+00:00"},
                                                    {"captured_at":None}])
             self.assertEqual(sorted(order), [0,1,2])
-            self.assertEqual(method, "energy_arc_no_reliable_timestamps")
+            self.assertEqual(method, "visual_continuity_no_reliable_timestamps")
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "Requires FFmpeg")
