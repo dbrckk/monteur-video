@@ -48,8 +48,9 @@ def action_phases(samples: list, duration: float) -> list[dict]:
               and 22 <= s.luminance <= 231 and s.detail >= 2]
     if len(usable) < 6:
         return []
-    baseline = median(max(0, s.motion) for s in usable)
-    threshold = max(1.9, min(14.0, baseline * 1.28))
+    motions = sorted(max(0, s.motion) for s in usable)
+    baseline = median(motions[:max(3, len(motions) // 2)])
+    threshold = max(1.9, min(14.0, baseline * 1.75))
     active = [s.motion >= threshold for s in usable]
     # Fill one-sample dips only when temporal samples are contiguous.
     for i in range(1, len(active) - 1):
