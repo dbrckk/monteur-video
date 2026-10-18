@@ -50,6 +50,8 @@
     .hint{border-left:3px solid #cafa51;padding:11px 13px;background:#1b2930;border-radius:7px;margin:14px 0;color:#d3e3e7;font-size:13px;line-height:1.55}
     .secondary{border:1px solid #516451;color:#cafa51;background:transparent;border-radius:11px;padding:13px 16px;min-height:48px;cursor:pointer;font-weight:700}
     #resumeJob{display:none;margin-top:10px;width:100%}
+    .rush-list{list-style:none;counter-reset:rush;padding:0;margin:12px 0 0;display:grid;gap:9px}.rush-list li{display:flex;gap:12px;align-items:center;padding:11px 12px;border:1px solid #34474e;border-radius:11px;background:#111e28;font-size:13px}.rush-no{display:grid;place-items:center;width:29px;height:29px;flex:none;border-radius:8px;background:#cafa51;color:#102112;font-weight:900}.rush-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rush-size{color:#a7b4bf;white-space:nowrap}
+    .filter-panel{display:none;margin-top:24px;border-top:1px solid #2d4247;padding-top:24px}.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;margin:17px 0}.filter-choice{display:flex;flex-direction:column;align-items:stretch;text-align:left;gap:6px;padding:9px;background:#0d1823;color:#e2edf2;border:1px solid #34424a;border-radius:12px;cursor:pointer;min-height:136px;transition:border-color .2s}.filter-choice[aria-pressed="true"]{border-color:#cafa51;box-shadow:0 0 0 1px #cafa51}.filter-choice strong{font-size:13px}.filter-choice small{font-size:11px;color:#a8bac3;line-height:1.4}.filter-swatch{height:57px;border-radius:7px;background:linear-gradient(140deg,#e9ad69 0%,#687b8e 42%,#17293c 100%)}.filter-apply{width:100%}.filter-apply:disabled{opacity:.45;cursor:not-allowed}
     @media(max-width:780px){header{margin-bottom:45px}.grid{grid-template-columns:1fr}.wrap{padding:20px 16px 50px}h1{letter-spacing:-1.7px}.card{padding:20px}.pill{font-size:11px}.drop{min-height:150px;padding:18px}.wrap{padding-bottom:calc(46px + env(safe-area-inset-bottom))}button,.download,select,input{min-height:48px} .preview video{width:100%;max-height:72dvh}.download{display:block;text-align:center;width:100%}.row{flex-direction:column;gap:0}}
   </style>
 </head>
@@ -58,17 +60,18 @@
 <header><span class="brand">MONTEUR<b> STUDIO</b></span><span class="pill">WEB · ANDROID · BÊTA</span></header>
 <section>
   <h1>De tes rushs à des vidéos <em>qui marquent.</em></h1>
-  <p class="lead">Depuis la galerie de ton téléphone : un fichier, un thème, un format. Le moteur analyse tes images et ta voix, choisit des séquences, monte, sous-titre et prépare la publication. Les vidéos longues sont envoyées par morceaux.</p>
+  <p class="lead">Depuis la galerie de ton téléphone : une ou plusieurs vidéos, un thème, un format. Le moteur analyse tes images et ta voix, choisit des séquences, monte, sous-titre et prépare la publication. Les vidéos longues sont envoyées par morceaux.</p>
 </section>
 <div class="grid">
   <section class="card">
     <h2>01 / Créer un montage</h2>
     <label class="drop" id="drop" for="video">
       <span class="icon">↑</span>
-      <strong id="fileName">Choisir une vidéo depuis mon téléphone</strong>
-      <small>Galerie Android ou fichiers · MP4, MOV, MKV, WebM, AVI</small>
+      <strong id="fileName">Choisir une ou plusieurs vidéos</strong>
+      <small>Jusqu’à 10 vidéos en un seul montage · Galerie Android ou fichiers</small>
     </label>
-    <input id="video" type="file" accept=".mp4,.mov,.mkv,.webm,.avi,.m4v,video/*">
+    <input id="video" type="file" multiple accept=".mp4,.mov,.mkv,.webm,.avi,.m4v,video/*">
+    <ol id="selectedList" class="rush-list" aria-label="Vidéos sélectionnées"></ol>
     <div class="row">
       <div><label class="setting" for="aspect">Format de sortie</label>
         <select id="aspect"><option value="vertical">Reels / Shorts · 9:16</option><option value="youtube">YouTube · 16:9</option></select>
@@ -81,7 +84,7 @@
     <select id="seconds"><option value="30">30 s · Impact rapide</option><option value="45" selected>45 s · Reel conseillé</option><option value="60">60 s · Narration</option><option value="90">90 s · Plus détaillé</option><option value="180">180 s · Long extrait</option></select>
     <label class="setting" for="backend">Adresse HTTPS du moteur de montage</label><input id="backend" type="url" placeholder="https://api.example.com"><button type="button" class="copy" id="saveBackend" style="margin-top:10px">Enregistrer le moteur</button><label class="setting" for="token">Clé d'accès (uniquement si serveur protégé)</label>
     <input id="token" type="password" autocomplete="off" placeholder="Facultatif en local">
-    <div class="hint" id="mobileHelp">Pendant l’envoi, garde cet onglet ouvert et le téléphone connecté. Si l’envoi est interrompu, reviens ici et sélectionne à nouveau le même fichier pour reprendre le transfert. Après l’envoi complet, le serveur poursuit le montage même si tu quittes le site.</div>
+    <div class="hint" id="mobileHelp">Pendant l’envoi, garde cet onglet ouvert et le téléphone connecté. Si l’envoi est interrompu, reviens ici et sélectionne à nouveau les mêmes vidéos pour reprendre le transfert. Après l’envoi complet, le serveur poursuit le montage même si tu quittes le site.</div>
     <button id="start" class="btn">Créer mon montage →</button>
     <button id="resumeJob" class="secondary" type="button">Retrouver mon dernier montage</button>
     <p class="muted">Traitement côté serveur. La transcription IA nécessite le module Whisper optionnel. Sans celui-ci, le montage utilise les plans et les silences sans inventer de sous-titres.</p>
@@ -89,9 +92,9 @@
   <aside class="card">
     <h2>Le processus</h2>
     <div class="step"><span class="n">1</span><div><strong>Analyse des rushs</strong><p>Lecture de la vidéo, repérage des changements de plans et des passages parlés.</p></div></div>
-    <div class="step"><span class="n">2</span><div><strong>Construction du rythme</strong><p>Sélection des séquences, suppression de passages silencieux et cadrage 9:16 ou 16:9.</p></div></div>
+    <div class="step"><span class="n">2</span><div><strong>Fusion des meilleurs moments</strong><p>Chaque vidéo contribue au montage final, dans l’ordre de sélection, avec rythme et format 9:16 ou 16:9.</p></div></div>
     <div class="step"><span class="n">3</span><div><strong>Finition audiovisuelle</strong><p>Encodage H.264, audio AAC, sous-titres si une transcription existe.</p></div></div>
-    <div class="step"><span class="n">4</span><div><strong>Prêt à publier</strong><p>Vidéo MP4, description Instagram et hashtags thématiques enrichis par le discours détecté.</p></div></div>
+    <div class="step"><span class="n">4</span><div><strong>Filtres et publication</strong><p>Après le rendu, sélection d’un look conseillé pour le thème, export MP4 final, description et hashtags.</p></div></div>
     <p class="muted">Les choix artistiques avancés, le suivi automatique du sujet et l'étalonnage cinématographique restent des évolutions à valider.</p>
   </aside>
 </div>
@@ -104,8 +107,15 @@
     <video id="resultVideo" controls playsinline preload="metadata"></video>
     <a class="download" id="download" href="#" download>Télécharger le MP4 sur mon téléphone ↓</a>
   </div>
+  <section class="filter-panel" id="filterPanel" aria-label="Filtres de finition">
+    <h2>03 / Personnaliser le rendu</h2>
+    <p class="muted" id="filterIntro">Filtres recommandés pour le thème choisi. Sélectionne un look, vérifie l’aperçu puis applique-le à la vidéo finale.</p>
+    <div id="filterOptions" class="filter-grid" role="group" aria-label="Choix du filtre"></div>
+    <p id="filterStatus" class="muted" role="status" aria-live="polite"></p>
+    <button id="applyFilter" type="button" class="secondary filter-apply">Appliquer le filtre au MP4</button>
+  </section>
   <div class="metadata" id="metadata">
-    <div class="labelrow"><h2>03 / Description et hashtags</h2><button id="copy" class="copy">Copier</button></div>
+    <div class="labelrow"><h2>04 / Description et hashtags</h2><button id="copy" class="copy">Copier</button></div>
     <textarea id="description" readonly></textarea>
     <p id="quality" class="muted"></p>
   </div>
