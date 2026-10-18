@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0c111b">
+  <meta name="description" content="Importe tes vidéos depuis ton smartphone et récupère tes montages Reels et Shorts.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <title>Monteur Studio — vidéos qui marquent</title>
   <style>
     :root{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#edf5fa;background:#0c111b}
@@ -24,7 +28,7 @@
     .icon{font-size:37px;color:#cafa51}.drop strong{font-size:16px}.drop small{color:#9aa8af;overflow-wrap:anywhere}
     input[type=file]{display:none}
     label.setting{display:block;margin:22px 0 8px;color:#d7e2eb;font-weight:700;font-size:13px}
-    select,input[type=number],input[type=password]{appearance:none;width:100%;background:#0e1720;border:1px solid #34424a;color:#fff;font-size:15px;padding:14px 15px;border-radius:11px;outline:none}
+    select,input[type=number],input[type=password],input[type=url]{appearance:none;width:100%;background:#0e1720;border:1px solid #34424a;color:#fff;font-size:15px;padding:14px 15px;border-radius:11px;outline:none}
     select:focus,input:focus{border-color:#cafa51}
     .row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
     .btn{border:0;border-radius:12px;padding:16px 22px;font-size:15px;font-weight:800;cursor:pointer;background:#cafa51;color:#162006;width:100%;margin-top:24px;transition:filter .2s}
@@ -43,23 +47,26 @@
     textarea{width:100%;resize:vertical;min-height:175px;border-radius:10px;background:#0b141e;border:1px solid #33424c;color:#ecf7f8;font:14px/1.6 inherit;padding:15px;margin:12px 0}
     .metadata{margin-top:23px;display:none}.labelrow{display:flex;justify-content:space-between;align-items:center;gap:10px}
     footer{color:#899ca4;font-size:12px;margin-top:36px;line-height:1.8}
-    @media(max-width:780px){header{margin-bottom:45px}.grid{grid-template-columns:1fr}.wrap{padding:20px 16px 50px}h1{letter-spacing:-1.7px}.card{padding:20px}.pill{font-size:11px}}
+    .hint{border-left:3px solid #cafa51;padding:11px 13px;background:#1b2930;border-radius:7px;margin:14px 0;color:#d3e3e7;font-size:13px;line-height:1.55}
+    .secondary{border:1px solid #516451;color:#cafa51;background:transparent;border-radius:11px;padding:13px 16px;min-height:48px;cursor:pointer;font-weight:700}
+    #resumeJob{display:none;margin-top:10px;width:100%}
+    @media(max-width:780px){header{margin-bottom:45px}.grid{grid-template-columns:1fr}.wrap{padding:20px 16px 50px}h1{letter-spacing:-1.7px}.card{padding:20px}.pill{font-size:11px}.drop{min-height:150px;padding:18px}.wrap{padding-bottom:calc(46px + env(safe-area-inset-bottom))}button,.download,select,input{min-height:48px} .preview video{width:100%;max-height:72dvh}.download{display:block;text-align:center;width:100%}.row{flex-direction:column;gap:0}}
   </style>
 </head>
 <body>
 <main class="wrap">
-<header><span class="brand">MONTEUR<b> STUDIO</b></span><span class="pill">LOCAL · OPEN SOURCE · BÊTA</span></header>
+<header><span class="brand">MONTEUR<b> STUDIO</b></span><span class="pill">WEB · ANDROID · BÊTA</span></header>
 <section>
   <h1>De tes rushs à des vidéos <em>qui marquent.</em></h1>
-  <p class="lead">Un fichier, un thème, un format. Le moteur analyse tes images et ta voix, choisit des séquences, monte, sous-titre et prépare la publication. Les vidéos longues sont envoyées par morceaux.</p>
+  <p class="lead">Depuis la galerie de ton téléphone : un fichier, un thème, un format. Le moteur analyse tes images et ta voix, choisit des séquences, monte, sous-titre et prépare la publication. Les vidéos longues sont envoyées par morceaux.</p>
 </section>
 <div class="grid">
   <section class="card">
     <h2>01 / Créer un montage</h2>
     <label class="drop" id="drop" for="video">
       <span class="icon">↑</span>
-      <strong id="fileName">Dépose ta vidéo ici, ou sélectionne un fichier</strong>
-      <small>MP4, MOV, MKV, WebM, AVI · Grands fichiers acceptés selon l'espace disponible</small>
+      <strong id="fileName">Choisir une vidéo depuis mon téléphone</strong>
+      <small>Galerie Android ou fichiers · MP4, MOV, MKV, WebM, AVI</small>
     </label>
     <input id="video" type="file" accept=".mp4,.mov,.mkv,.webm,.avi,.m4v,video/*">
     <div class="row">
@@ -74,7 +81,9 @@
     <select id="seconds"><option value="30">30 s · Impact rapide</option><option value="45" selected>45 s · Reel conseillé</option><option value="60">60 s · Narration</option><option value="90">90 s · Plus détaillé</option><option value="180">180 s · Long extrait</option></select>
     <label class="setting" for="backend">Adresse HTTPS du moteur de montage</label><input id="backend" type="url" placeholder="https://api.example.com"><button type="button" class="copy" id="saveBackend" style="margin-top:10px">Enregistrer le moteur</button><label class="setting" for="token">Clé d'accès (uniquement si serveur protégé)</label>
     <input id="token" type="password" autocomplete="off" placeholder="Facultatif en local">
+    <div class="hint" id="mobileHelp">Pendant l’envoi, garde cet onglet ouvert et le téléphone connecté. Si l’envoi est interrompu, reviens ici et sélectionne à nouveau le même fichier pour reprendre le transfert. Après l’envoi complet, le serveur poursuit le montage même si tu quittes le site.</div>
     <button id="start" class="btn">Créer mon montage →</button>
+    <button id="resumeJob" class="secondary" type="button">Retrouver mon dernier montage</button>
     <p class="muted">Traitement côté serveur. La transcription IA nécessite le module Whisper optionnel. Sans celui-ci, le montage utilise les plans et les silences sans inventer de sous-titres.</p>
   </section>
   <aside class="card">
@@ -93,7 +102,7 @@
   <p id="message" class="muted">Le traitement continue tant que le serveur est actif.</p>
   <div class="preview" id="preview">
     <video id="resultVideo" controls playsinline preload="metadata"></video>
-    <a class="download" id="download" href="#">Télécharger la vidéo MP4 ↓</a>
+    <a class="download" id="download" href="#" download>Télécharger le MP4 sur mon téléphone ↓</a>
   </div>
   <div class="metadata" id="metadata">
     <div class="labelrow"><h2>03 / Description et hashtags</h2><button id="copy" class="copy">Copier</button></div>
@@ -108,6 +117,8 @@
   const $ = id => document.getElementById(id); const API_BASE = (localStorage.getItem("backendUrl") || "").replace(/\/$/, ""); const apiPath = path => API_BASE + path;
   const drop = $("drop"), input = $("video"), button = $("start");
   let pollTimer;
+  const isStatic = location.hostname.endsWith("github.io");
+  if(isStatic && !API_BASE) { $("mobileHelp").textContent = "Site statique : renseigne d’abord l’adresse HTTPS du moteur de montage. GitHub Pages ne peut pas traiter les vidéos à lui seul."; }
   const stages = {probe:"Vérification des médias",speech:"Transcription de la voix",scenes:"Détection des plans",silence:"Recherche des silences",render:"Encodage des séquences",queued:"En attente du moteur",done:"Montage terminé",failed:"Échec de production"};
   function progress(p,label,message="") {
     $("statusCard").classList.add("active");
@@ -125,7 +136,12 @@
     button.textContent = "Réessayer →";
   }
   async function request(path, options={}) {
-    const response = await fetch(apiPath(path), {credentials:API_BASE ? "include" : "same-origin",...options});
+    if(isStatic && !API_BASE) throw new Error("Configure l’adresse HTTPS du moteur de montage pour utiliser le site.");
+    const headers = {...(options.headers || {})};
+    // Do not store the secret on disk: it lives only in the current page.
+    if(API_BASE && $("token").value) headers.Authorization = "Bearer " + $("token").value;
+    const response = await fetch(apiPath(path), {...options, headers,
+      credentials: API_BASE ? "omit" : "same-origin"});
     if(!response.ok) {
       let description = response.statusText;
       try { const data = await response.json(); description = data.detail || description; } catch {}
@@ -141,7 +157,10 @@
     if(!file) return;
     if(file.size <= 0) return showError(new Error("Le fichier est vide."));
     input._selectedFile = file;
-    $("fileName").textContent = file.name + " · " + (file.size/1024**3).toFixed(2) + " Go";
+    const amount = file.size >= 1024**3
+      ? (file.size / 1024**3).toFixed(2) + " Go"
+      : (file.size / 1024**2).toFixed(1) + " Mo";
+    $("fileName").textContent = file.name + " · " + amount;
   }
   input.addEventListener("change", e => selectFile(e.target.files[0]));
   ["dragenter","dragover"].forEach(name => drop.addEventListener(name,e => {e.preventDefault();drop.classList.add("drag");}));
@@ -149,16 +168,17 @@
   drop.addEventListener("drop",e=> selectFile(e.dataTransfer.files[0]));
   async function upload(file) {
     let session;
-    try { session = JSON.parse(sessionStorage.getItem("ongoingUpload") || "null"); } catch {}
-    if(!session || session.filename !== file.name || session.size !== file.size) {
+    try { session = JSON.parse(localStorage.getItem("ongoingUpload") || "null"); } catch {}
+    const fingerprint = [API_BASE, file.name, file.size, file.lastModified].join("|");
+    if(!session || session.fingerprint !== fingerprint) {
       session = await request("/api/uploads", {method:"POST",
         headers:{"Content-Type":"application/json"},body:JSON.stringify({filename:file.name,size:file.size})});
-      session.filename = file.name;
-      sessionStorage.setItem("ongoingUpload",JSON.stringify(session));
+      session.fingerprint = fingerprint;
+      localStorage.setItem("ongoingUpload",JSON.stringify(session));
     }
     let current = await request("/api/uploads/" + session.id);
     if(current.status !== "uploading") {
-      sessionStorage.removeItem("ongoingUpload");
+      localStorage.removeItem("ongoingUpload");
       throw new Error("Ce transfert est déjà terminé.");
     }
     let offset = current.offset, attempts = 0;
@@ -170,13 +190,14 @@
         offset = state.offset;
         attempts = 0;
       } catch(error) {
-        if(++attempts > 3) throw error;
+        if(++attempts > 6) throw new Error("Envoi interrompu : reviens sur ce site et resélectionne la même vidéo pour reprendre. " + error.message);
+        await new Promise(resolve => setTimeout(resolve, Math.min(8000, 500 * 2 ** attempts)));
         current = await request("/api/uploads/" + session.id);
         offset = current.offset;
       }
       progress(offset / file.size * .5, "Transfert des rushs", (offset/1024**3).toFixed(2) + " / " + (file.size/1024**3).toFixed(2) + " Go");
     }
-    sessionStorage.removeItem("ongoingUpload");
+    localStorage.removeItem("ongoingUpload");
     return session.id;
   }
   async function poll(id) {
@@ -190,7 +211,9 @@
         button.disabled = false;
         button.textContent = "Créer un autre montage →";
         localStorage.removeItem("lastJob");
-        const url = apiPath("/api/jobs/" + encodeURIComponent(id) + "/download");
+        $("resumeJob").style.display = "none";
+        const link = await request("/api/jobs/" + encodeURIComponent(id) + "/download-link");
+        const url = apiPath(link.url);
         $("preview").style.display = "block";
         $("download").href = url;
         $("resultVideo").src = url;
@@ -210,6 +233,7 @@
     if(!file) return showError(new Error("Sélectionne une vidéo."));
     button.disabled = true;
     $("message").className = "muted";
+    clearTimeout(pollTimer);
     $("preview").style.display = "none";$("metadata").style.display = "none";
     try {
       await login();
@@ -218,7 +242,8 @@
       await request("/api/uploads/" + id + "/complete",{method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({theme:$("theme").value,aspect:$("aspect").value,seconds:Number($("seconds").value)})});
-      localStorage.setItem("lastJob",id);
+      localStorage.setItem("lastJob",JSON.stringify({id,origin:API_BASE}));
+      $("resumeJob").style.display="block";
       await poll(id);
     }catch(error){showError(error);}
   });
@@ -227,8 +252,27 @@
     $("copy").textContent = "Copié ✓";
     setTimeout(()=>$("copy").textContent="Copier",1800);
   });
-  $("backend").value = API_BASE; $("saveBackend").addEventListener("click",()=>{const v=$("backend").value.trim().replace(/\/$/,"");if(v && !/^https:\/\/[^/]+$/.test(v))return showError(new Error("Adresse HTTPS invalide"));if(v)localStorage.setItem("backendUrl",v);else localStorage.removeItem("backendUrl");location.reload();}); const previousJob = localStorage.getItem("lastJob");
-  if(previousJob) poll(previousJob);
+  $("backend").value = API_BASE;
+  $("saveBackend").addEventListener("click",()=>{
+    const v = $("backend").value.trim().replace(/\/$/,"");
+    if(v && !/^https:\/\/[^/]+$/.test(v)) return showError(new Error("Adresse HTTPS invalide"));
+    if(v) localStorage.setItem("backendUrl",v); else localStorage.removeItem("backendUrl");
+    location.reload();
+  });
+  const previousJobRaw = localStorage.getItem("lastJob");
+  let previousJob;
+  try { previousJob = JSON.parse(previousJobRaw); } catch { previousJob = {id:previousJobRaw,origin:""}; }
+  if(previousJob?.id && previousJob.origin === API_BASE) {
+    $("resumeJob").style.display = "block";
+    $("resumeJob").addEventListener("click",()=>{
+      if(API_BASE && !$("token").value) return showError(new Error("Renseigne ta clé d’accès pour reprendre le suivi."));
+      poll(previousJob.id);
+    });
+    if(!API_BASE) poll(previousJob.id);
+  }
+  if("serviceWorker" in navigator && location.protocol === "https:") {
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  }
 })();
 </script>
 </body>
