@@ -126,6 +126,7 @@ class MultiVideoApiTests(unittest.TestCase):
                 url = link.json()["url"]
                 self.assertEqual(client.get(url).status_code, 200)
                 self.assertEqual(client.get(url).content, b"rendered_filter")
+                self.assertIn("impact.mp4", client.get(url).headers["content-disposition"])
                 tampered = url.replace("preset=impact", "preset=acier")
                 self.assertEqual(client.get(tampered).status_code, 401)
                 self.assertEqual(client.get(f"/api/jobs/{ident}/download",
