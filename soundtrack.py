@@ -229,3 +229,42 @@ def add_soundtrack(video: Path, theme: str, *, sound_mode: str = "auto",
     finally:
         mixed.unlink(missing_ok=True)
         loop_file.unlink(missing_ok=True)
+
+
+def prepare_instagram_reel(video: Path, *, sound_mode: str = "auto",
+                           voice_present: bool = False,
+                           progress: Callable[[float, str], None] | None = None) -> dict:
+    """Export a silent/quiet source ready for native Instagram music addition.
+
+    Critically: no unauthorized third-party recording is downloaded or copied.
+    Instagram supplies the chosen commercial recording in its own composer.
+    """
+    if sound_mode not in SOUND_LEVELS:
+        raise ValueError("Mode audio inconnu")
+    if not video.is_file():
+        raise FileNotFoundError("MP4 original introuvable")
+    volume = (0.2 if voice_present else 0.0) if sound_mode == "auto" else SOUND_LEVELS[sound_mode]
+    partial = video.with_name(video.stem + ".ig-audio.partial.mp4")
+    partial.unlink(missing_ok=True)
+    if progress:
+        progress(0.95, "music")
+    try:
+        command = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+                   "-i", str(video), "-map", "0:v:0", "-c:v", "copy"]
+        if volume > 0:
+            command += ["-map", "0:a:0?", "-af", f"volume={volume:.2f}",
+                        "-c:a", "aac", "-b:a", "128k", "-ar", "48000"]
+        else:
+            command += ["-an"]
+        command += ["-movflags", "+faststart", str(partial)]
+        execute(command, timeout=180)
+        probe_media(partial)
+        os.replace(partial, video)
+        if progress:
+            progress(0.99, "music")
+        return {"mode": "instagram_native", "music_embedded": False,
+                "source_audio_mode": sound_mode, "original_audio_volume": volume,
+                "next_action": "Dans Instagram, ajouter la musique recommandée à ce Reel",
+                "licensing": "La musique sous licence est ajoutée dans l'application Instagram"}
+    finally:
+        partial.unlink(missing_ok=True)
