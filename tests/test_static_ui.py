@@ -44,7 +44,7 @@ class StaticMobileTests(unittest.TestCase):
         self.assertIn('type="file" multiple', source)
         self.assertIn('"/api/montages"', source)
         self.assertIn("project_id:batch.id", source)
-        self.assertIn('"preset=" + encodeURIComponent', source)
+        self.assertIn('"?preset=" + encodeURIComponent(activePreset)', source)
         self.assertIn('credentials: API_BASE ? "omit"', source)
         self.assertIn("Bearer ", source)
         self.assertTrue((WEB / "icon.svg").exists())
