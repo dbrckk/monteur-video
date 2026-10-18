@@ -25,6 +25,19 @@ Les longs rushs sont analysés sur des fenêtres réparties sur toute leur duré
 
 L'encodage est limité en threads et les sous-clips ont de légers fondus audio aux points de coupe, sans musique externe ajoutée. Chaque sous-processus FFmpeg critique dispose d'une limite de temps ; un échec explicite est préférable à un montage bloqué indéfiniment. Comme les images ne sont échantillonnées qu'à intervalles pour économiser le CPU, le meilleur mouvement d'un rush très long peut encore passer entre deux fenêtres.
 
+## Bande-son originale, rythme sportif et audio des rushs
+
+Le serveur génère localement une **musique instrumentale originale** selon le thème et l'ajoute au master MP4 final : **Power Session** (fitness, 144 BPM), **Sprint Mode** (sport, 152 BPM), **Rise Again** (motivation, 128 BPM), **Daylight Motion** (lifestyle, 116 BPM), **Momentum** (auto, 136 BPM). Batterie synthétique, basse, motif mélodique et variations de mesures sont calculés par `soundtrack.py`, sans télécharger ni réutiliser de morceaux commerciaux, d'échantillons tiers ni de musiques issues de TikTok/Instagram.
+
+Sur smartphone, le son du fichier source est réglable :
+- **Auto** (par défaut) : son des rushs **coupé**, sauf si une vraie transcription a identifié de la parole dans le montage, auquel cas le son d'origine est à **20 %**.
+- **Couper** : son d'origine à **0 %**.
+- **20 %** : conserver légèrement la voix et les bruits de la séance en fond de musique.
+
+Les clips de sport et musculation sont réduits à des phrases de **8 temps environ**, avec une préférence pour les durées multiples de **4 temps** et des coupes franches calées sur le tempo du morceau généré. La musique reste continue pendant tout le montage, même si les rushs changent d'ordre, et les coupes audio sources bénéficient de fondus très courts.
+
+Ces instrumentaux originaux fournissent une solution utilisable gratuitement et sans clé, mais ne prétendent pas être des musiques populaires sous licence TikTok ni un catalogue professionnel produit par des artistes. Sans Whisper, l'option automatique ne peut pas déterminer si la voix est intéressante : elle privilégie donc la musique seule. Les métadonnées d'export indiquent la musique, le BPM, sa provenance et le niveau de son source réellement utilisé.
+
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.
