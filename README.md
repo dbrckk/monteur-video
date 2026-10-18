@@ -6,7 +6,7 @@ Application web **locale** construite pour produire de vrais montages à partir 
 
 ## Site web gratuit — Android / smartphone
 
-**Interface actuellement publiée : https://angled-gate-srzt937.shipstatic.com** (hébergement statique gratuit avec déploiement connecté sans date d'expiration indiquée). GitHub Pages reste une seconde adresse possible après activation des Pages dans les paramètres du dépôt.
+**Nouvelle interface multi-vidéo avec filtres : https://snappy-gate-x58qpre.shipstatic.com** (ancien site conservé : https://angled-gate-srzt937.shipstatic.com). (hébergement statique gratuit avec déploiement connecté sans date d'expiration indiquée). GitHub Pages reste une seconde adresse possible après activation des Pages dans les paramètres du dépôt.
 
 **Important :** les deux hébergeurs statiques ne peuvent pas traiter des vidéos. Il reste à connecter un moteur de montage HTTPS.
 
