@@ -2,21 +2,26 @@
 
 Application web **mobile-first** avec moteur local ou distant sécurisé, construite pour produire de vrais montages à partir de longues vidéos, et non de démonstrations synthétiques. Importation de **1 à 10 vidéos pour un seul montage**, reprenable par blocs de 8 Mio, analyse FFmpeg des scènes et silences, transcription facultative via faster-whisper, assemblage des clips issus de chaque rush, incrustation de sous-titres, filtres colorimétriques sélectionnables **après le premier rendu**, export **9:16 (Instagram/Reels/Shorts)** ou **16:9 (YouTube)** en H.264/AAC, description française et hashtags.
 
-**État : V1 fonctionnelle et validée en tests, sous réserve de disposer d'un ordinateur hébergeant le moteur.** Ce moteur n'est pas encore un éditeur haut de gamme entièrement automatique. Le recadrage est centré et non intelligent ; la sélection des moments forts repose sur des heuristiques, et aucune musique ou effet visuel tiers n'est injecté sans droits. Les fonctions sont soumises à une CI qui tente un véritable encodage des deux formats.
+**État : V1 disponible gratuitement sur moteur HD hébergé, mais avec stockage éphémère ; un hébergement personnel offre davantage de contrôle.** Ce moteur n'est pas encore un éditeur haut de gamme entièrement automatique. Le recadrage est centré et non intelligent ; la sélection des moments forts repose sur des heuristiques, et aucune musique ou effet visuel tiers n'est injecté sans droits. Les fonctions sont soumises à une CI qui tente un véritable encodage des deux formats.
 
-## Bêta HTTPS Render (2026-10-18)
+## Moteur HD gratuit stable (2026-10-18)
 
-Une instance gratuite de démonstration a été créée : **https://monteur-video-beta.onrender.com**. L'interface statique GitHub Pages utilise désormais cette adresse par défaut ; la clé d'accès n'est **pas** intégrée au code et doit être renseignée par l'utilisateur. Le mode démonstration `MONTEUR_PUBLIC_DEMO=1` est accessible sans clé ; il limite les créations simultanées et vérifie les origines navigateur autorisées. La vérification de l'origine n'est pas une authentification et ne protège pas contre les clients qui falsifient cet en-tête. Pour un serveur privé, conserver `APP_API_TOKEN`.
+L'interface publique [Monteur Studio](https://dbrckk.github.io/monteur-video/) utilise **https://monteur-video-stable.onrender.com**, sans clé d'accès à saisir. Ce service Render Free est fixé à la branche GitHub `release/hd-stable`, avec **déploiement automatique désactivé** : les changements de `main` ne provoquent plus l'arrêt d'un montage en cours. Les mises à jour du moteur doivent être validées et déployées séparément, de préférence hors traitement actif.
 
-Configuration gratuite de précaution : `MONTEUR_RENDER_SIZE=720` (720×1280 HD pour Reels), `MAX_UPLOAD_GB=0.35` par fichier, `UPLOAD_TTL_HOURS=6`, `RESULT_TTL_DAYS=1`. Les fonctionnalités d'édition (1–10 sources, filtres et export) sont identiques mais les vidéos longues/volumineuses et les gros projets peuvent dépasser les ressources gratuites.
+- Export **HD 720p uniquement** : 720×1280 (vertical) ou 1280×720 (horizontal).
+- Jusqu'à **10 vidéos par montage**, import séquentiel reprenable ; **350 Mio environ par fichier** sur ce serveur, selon l'espace réellement disponible.
+- Durée automatique ou cible de **10 à 180 secondes**, filtres et MP4 H.264/AAC.
+- Aucune clé demandée à l'utilisateur sur la démonstration publique ; les moteurs privés conservent l'authentification.
+- Le navigateur relance un transfert dont la session a disparu après un redémarrage ; si un montage retourne 404, il tente une nouvelle importation **une seule fois** tant que les fichiers sont encore sélectionnés. Après fermeture/rechargement de la page, il faut parfois sélectionner à nouveau les originaux.
+- **Important : le disque Render Free reste éphémère**, même avec ce déploiement stable. La mise en veille, un incident ou un redémarrage peuvent toujours faire disparaître les sources, les projets et les MP4 avant leur durée indicative d'expiration. **Cela ne remplace pas un stockage persistant**. Conserver les vidéos d'origine sur le téléphone et télécharger le résultat dès qu'il est disponible.
 
-**Avertissement :** Render Free peut mettre l'instance en veille et effacer les fichiers du disque éphémère lors d'un redémarrage ou déploiement. Aucun stockage persistant n'est configuré. Ne pas utiliser pour des rushs irremplaçables ; conserver les originaux sur le téléphone. La transcription Whisper est désactivée dans cette image allégée, mais les montages FFmpeg et les filtres fonctionnent. Cette bêta n'est pas une garantie de stabilité pour des vidéos de plusieurs heures.
+Les anciennes instances `monteur-video-beta` et `monteur-video-hd` ne sont plus les points d'accès par défaut. La transcription Whisper est désactivée sur le moteur gratuit allégé ; aucune transcription/sous-titre n'est inventé lorsque ce module est absent.
 
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.
 
-**Important :** les deux hébergeurs statiques ne traitent pas les vidéos. Le moteur FFmpeg se lance maintenant gratuitement sur votre PC avec un tunnel HTTPS et une clé secrète créée automatiquement. Il faut garder cet ordinateur allumé pendant le traitement.
+**Important :** les deux hébergeurs statiques ne traitent pas les vidéos. Le moteur FFmpeg est disponible sur Render Free sans clé pour un usage d'essai. Un PC personnel avec tunnel HTTPS reste une alternative pour des fichiers plus volumineux ou un traitement privé.
 
 
 
@@ -24,7 +29,7 @@ L'interface statique est **déjà publiée sur https://dbrckk.github.io/monteur-
 
 **Parcours smartphone :** sélectionner simultanément jusqu'à 10 vidéos dans la galerie Android, les envoyer une à une par blocs reprenables, puis produire **un seul MP4** incluant des moments de chaque rush. Laisser l'onglet ouvert durant l'envoi ; le traitement continue côté serveur après fermeture. Lorsque le montage est disponible, choisir parmi les filtres recommandés selon le thème (fitness, motivation, sport, lifestyle), appliquer celui souhaité sans perdre le master original, puis télécharger la version choisie sur le téléphone.
 
-L'interface seule ne peut pas produire le montage : il faut connecter par HTTPS un serveur personnel qui exécute FFmpeg et Whisper. Les requêtes depuis GitHub Pages sont autorisées par CORS explicite et nécessitent `APP_API_TOKEN` dans l'en-tête Authorization. Les téléchargements passent par un lien temporaire signé ; la clé API n'apparaît pas dans l'URL.
+L'interface seule ne peut pas encoder : elle utilise le serveur FFmpeg HD préconfiguré, ou un moteur personnel. Le moteur public fonctionne sans clé ; le mode privé exige `APP_API_TOKEN` dans l'en-tête Authorization. Les téléchargements passent par un lien temporaire signé ; la clé API n'apparaît pas dans l'URL.
 
 **[Guide de démarrage V1 Android + moteur gratuit en HTTPS](docs/REMOTE_ANDROID.md)** : une commande Linux/macOS ou Windows, clé API générée, Cloudflare Quick Tunnel temporaire. En option, Tailscale Funnel permet de conserver une adresse HTTPS stable avec un compte Personal gratuit. **[Documentation technique de l'hébergement statique](docs/STATIC_HOSTING.md)**.
 
