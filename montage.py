@@ -292,7 +292,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
     execute(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
              "-f", "concat", "-safe", "0", "-i", str(concat),
              "-map", "0:v:0", "-map", "0:a:0",
-             "-c", "copy", "-movflags", "+faststart", str(destination)])
+             "-c", "copy", "-movflags", "+faststart", str(destination)], timeout=180)
     if progress:
         progress(0.98, "render")
     output = social_metadata(theme, selected_speech, sum(x["duration"] for x in info))
@@ -337,7 +337,7 @@ def apply_filter(source: Path, destination: Path, preset: str,
                  "-vf", FILTER_PRESETS[preset]["vf"],
                  "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                  "-pix_fmt", "yuv420p", "-c:a", "copy",
-                 "-movflags", "+faststart", str(temporary)])
+                 "-movflags", "+faststart", str(temporary)], timeout=1200)
         if progress:
             progress(0.95, "filter")
         probe_media(temporary)
