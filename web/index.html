@@ -425,14 +425,11 @@
     try {
       const suffix = activePreset === "original" ? "" : "?preset=" + encodeURIComponent(activePreset);
       const link = await request("/api/jobs/" + encodeURIComponent(activeJob) + "/download-link" + suffix);
-      const a = document.createElement("a");
-      a.href = apiPath(link.url);
-      a.download = "montage-" + activePreset + ".mp4";
-      document.body.append(a);
-      a.click();
-      a.remove();
-      $("download").href = a.href;
+      // Android may block a programmatic download after an awaited network call.
+      // Refresh the signed URL and let the user's next tap start a real download.
+      $("download").href = apiPath(link.url);
       $("download").dataset.expires = String(Date.now() + (link.expires_in - 30) * 1000);
+      $("filterStatus").textContent = "Lien de téléchargement actualisé. Appuie à nouveau sur « Télécharger ».";
     } catch(error) {
       $("filterStatus").textContent = "Téléchargement indisponible : " + error.message;
     }
