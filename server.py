@@ -22,7 +22,8 @@ from pydantic import BaseModel, Field
 
 from editor import THEMES, edit_video
 from montage import MAX_SOURCES, FILTER_PRESETS, edit_many, filter_catalog, apply_filter
-from soundtrack import SOUND_LEVELS, add_soundtrack
+from soundtrack import SOUND_LEVELS, add_soundtrack, prepare_instagram_reel
+from reels_music import recommend_reels_audio
 
 ROOT = Path(os.environ.get("EDITOR_DATA_DIR", "./data")).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -181,6 +182,8 @@ class ExportRequest(BaseModel):
     aspect: str = "vertical"
     seconds: int = Field(default=0, ge=0, le=180)
     sound_mode: str = "auto"
+    music_mode: str = "original"
+    music_preference: str = "any"
 
 
 class MontageRequest(ExportRequest):
@@ -296,11 +299,21 @@ def run_job(ident: str) -> None:
                                 theme=settings["theme"], aspect=settings["aspect"],
                                 target_seconds=settings["seconds"],
                                 size=render_size, progress=video_progress)
-        music = add_soundtrack(folder / "final.mp4", settings["theme"],
-                               sound_mode=settings.get("sound_mode", "auto"),
-                               voice_present=bool(result.get("selected_transcript")),
-                               music_profile=result.get("music_profile"),
-                               progress=lambda p, stage: progress(0.93 + p * 0.065, stage))
+        if settings.get("music_mode", "original") == "instagram":
+            progress(0.94, "music")
+            result["reels_music"] = recommend_reels_audio(
+                settings["theme"], result.get("music_profile"),
+                vocals=settings.get("music_preference", "any"))
+            music = prepare_instagram_reel(
+                folder / "final.mp4", sound_mode=settings.get("sound_mode", "auto"),
+                voice_present=bool(result.get("selected_transcript")),
+                progress=lambda p, stage: progress(0.94 + p * 0.055, stage))
+        else:
+            music = add_soundtrack(folder / "final.mp4", settings["theme"],
+                                   sound_mode=settings.get("sound_mode", "auto"),
+                                   voice_present=bool(result.get("selected_transcript")),
+                                   music_profile=result.get("music_profile"),
+                                   progress=lambda p, stage: progress(0.93 + p * 0.065, stage))
         result["soundtrack"] = music
         (folder / "metadata.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -468,7 +481,7 @@ async def append_chunk(ident: str, request: Request):
 @app.post("/api/uploads/{ident}/complete", dependencies=[Depends(authorize)])
 def complete_upload(ident: str, data: ExportRequest):
     job = get_job(ident)
-    if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"} or data.sound_mode not in SOUND_LEVELS:
+    if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"} or data.sound_mode not in SOUND_LEVELS or data.music_mode not in {"original", "instagram"} or data.music_preference not in {"any", "instrumental", "vocals"}:
         raise HTTPException(status_code=422, detail="Configuration audio ou vidéo inconnue")
     # Prevent two clients finishing the same upload simultaneously.
     with database() as con:
@@ -495,7 +508,7 @@ def create_montage(data: MontageRequest):
     An optional client-generated UUID makes retry safe if a mobile connection
     drops after the server has already accepted the creation request.
     """
-    if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"} or data.sound_mode not in SOUND_LEVELS:
+    if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"} or data.sound_mode not in SOUND_LEVELS or data.music_mode not in {"original", "instagram"} or data.music_preference not in {"any", "instrumental", "vocals"}:
         raise HTTPException(status_code=422, detail="Paramètres de montage inconnus")
     try:
         ids = [str(uuid.UUID(item)) for item in data.upload_ids]
@@ -507,7 +520,9 @@ def create_montage(data: MontageRequest):
     if ident in ids:
         raise HTTPException(status_code=422, detail="Identifiant de montage en conflit")
     settings = {"theme": data.theme, "aspect": data.aspect,
-                "seconds": data.seconds, "sound_mode": data.sound_mode, "sources": ids}
+                "seconds": data.seconds, "sound_mode": data.sound_mode,
+                "music_mode": data.music_mode, "music_preference": data.music_preference,
+                "sources": ids}
     with database() as con:
         con.execute("BEGIN IMMEDIATE")
         existing = con.execute("SELECT * FROM jobs WHERE id=?", (ident,)).fetchone()
