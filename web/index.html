@@ -311,6 +311,29 @@
   let activePreset = "original";
   let filterTimer = null;
   let filterList = [];
+  let recoveryAttempts = 0;
+
+  function resetLostProject() {
+    clearTimeout(pollTimer);
+    clearTimeout(filterTimer);
+    localStorage.removeItem("lastJob");
+    localStorage.removeItem("ongoingMontage");
+    localStorage.removeItem("ongoingUploads");
+    activeJob = null;
+    $("resumeJob").style.display = "none";
+    $("retryRender").style.display = "none";
+    $("preview").style.display = "none";
+    $("filterPanel").style.display = "none";
+    $("metadata").style.display = "none";
+    $("retention").textContent = "";
+    progress(0, "Montage interrompu",
+      selectedFiles.length
+        ? "Le moteur HD a redémarré et perdu le projet. Les vidéos sont encore sélectionnées."
+        : "Le moteur HD a redémarré et le projet a disparu. Sélectionne de nouveau tes vidéos pour relancer.");
+    $("message").className = "error";
+    button.disabled = false;
+    button.textContent = "Recréer le montage →";
+  }
 
   function selectPreset(preset) {
     const item = filterList.find(option => option.id === preset);
