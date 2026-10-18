@@ -197,15 +197,32 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         raise ValueError(f"Sélectionner entre 1 et {MAX_SOURCES} vidéos")
     if source_names is not None and len(source_names) != len(sources):
         raise ValueError("Nombre de noms incohérent")
-    # Inspect each file before any expensive rendering.
-    info = [probe_media(Path(source)) for source in sources]
+    # Publish real milestones during preparation: the previous 51% stage could
+    # remain frozen for minutes while FFmpeg silently scanned whole recordings.
+    info = []
+    for i, source in enumerate(sources):
+        if progress:
+            progress(0.01 + i / len(sources) * 0.07, "probe")
+        info.append(probe_media(Path(source)))
+        if progress:
+            progress(0.01 + (i + 1) / len(sources) * 0.07, "probe")
     auto_mode = target_seconds == 0
-    scene_cache = ([detect_scenes(Path(src), item["duration"])
-                    for src, item in zip(sources, info)] if auto_mode else None)
-    quality_cache = ([analyze_visual(Path(src)) for src in sources] if auto_mode else None)
+    scene_cache: list[list[float]] = []
+    quality_cache: list[list] = []
+    for i, (source, item) in enumerate(zip(sources, info)):
+        base = 0.08 + i / len(sources) * 0.12
+        scene_cache.append(detect_scenes(
+            Path(source), item["duration"],
+            progress=(lambda p, base=base: progress(
+                base + p * 0.12 / len(sources), "scenes")) if progress else None))
+    for i, (source, item) in enumerate(zip(sources, info)):
+        base = 0.20 + i / len(sources) * 0.12
+        quality_cache.append(analyze_visual(
+            Path(source), duration=item["duration"],
+            progress=(lambda p, base=base: progress(
+                base + p * 0.12 / len(sources), "quality")) if progress else None))
     if auto_mode:
         analyzed = [sample for rush in quality_cache for sample in rush]
-        # Optical change is a proxy for action, not workout recognition.
         activity_seconds = (sum(0.5 for x in analyzed if x.motion >= 3.5 and
                                 25 <= x.luminance <= 230 and x.detail >= 4)
                             if analyzed else None)
@@ -213,15 +230,22 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                                             [len(s) for s in scene_cache],
                                             activity_seconds=activity_seconds)
     budgets = allocation([item["duration"] for item in info], target_seconds)
+    order = narrative_order([Path(source) for source in sources], quality_cache)
+    if progress:
+        progress(0.32, "story")
     if len(sources) == 1:
         result = edit_video(Path(sources[0]), destination, theme=theme, aspect=aspect,
                             target_seconds=target_seconds, transcribe=transcribe,
-                            size=size, progress=progress,
-                            detected_scenes=scene_cache[0] if scene_cache is not None else None,
-                            visual_samples=quality_cache[0] if quality_cache is not None else None)
+                            size=size,
+                            progress=(lambda p, stage: progress(0.32 + p * 0.62, stage))
+                            if progress else None,
+                            detected_scenes=scene_cache[0],
+                            visual_samples=quality_cache[0]
         result["target_duration_seconds"] = target_seconds
         result["duration_mode"] = "auto" if auto_mode else "manual"
         result["source_count"] = 1
+        result["sequence_strategy"] = "energy_arc"
+        result["sequence_order"] = [0]
         result["sources"] = [{
             "index": 0, "name": source_names[0] if source_names else Path(sources[0]).name,
             "duration_seconds": round(info[0]["duration"], 2),
