@@ -315,7 +315,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                             detected_scenes=scene_cache[0],
                             visual_samples=quality_cache[0],
                             music_profile=music_profile,
-                            grade_filter=grades["source_grades"][0]["filter"])
+                            grade_filter=grades["source_grades"][0]["filter"],
+                            color_reference=grades, source_index=0)
         result["target_duration_seconds"] = target_seconds
         result["duration_mode"] = "auto" if auto_mode else "manual"
         result["source_count"] = 1
@@ -351,6 +352,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             visual_samples=quality_cache[index],
             music_profile=music_profile,
             grade_filter=grades["source_grades"][index]["filter"],
+            color_reference=grades, source_index=index,
             progress=(lambda p, stage, position=position: progress(
                 min(0.94, 0.32 + (position + p) / len(sources) * 0.62), stage))
             if progress else None,
