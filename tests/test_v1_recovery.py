@@ -1,6 +1,7 @@
 """V1: restart recovery, automatic retention, and retry without reuploading."""
 import importlib
 import os
+import sqlite3
 import tempfile
 import unittest
 import uuid
@@ -19,6 +20,33 @@ class RecoveryTests(unittest.TestCase):
             "UPLOAD_TTL_HOURS": "72", "RESULT_TTL_DAYS": "14"}):
             server = importlib.reload(server)
         return server
+
+    def test_existing_v0_database_migrates_without_losing_projects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "jobs.sqlite3"
+            with sqlite3.connect(db) as con:
+                con.execute("""CREATE TABLE jobs(
+                    id TEXT PRIMARY KEY, filename TEXT NOT NULL,
+                    status TEXT NOT NULL, expected_size INTEGER NOT NULL,
+                    stage TEXT NOT NULL DEFAULT 'upload', progress REAL NOT NULL DEFAULT 0,
+                    error TEXT, options TEXT, metadata TEXT,
+                    created_at TEXT NOT NULL
+                )""")
+                ident = str(uuid.uuid4())
+                con.execute(
+                    "INSERT INTO jobs(id,filename,status,expected_size,stage,created_at)"
+                    "VALUES(?,?,?,?,?,?)",
+                    (ident, "older-version.mp4", "uploading", 123,
+                     "upload", datetime.now(timezone.utc).isoformat()))
+            server = self.setup_server(tmp)
+            server.initialize()
+            with server.database() as con:
+                fields = {row["name"] for row in con.execute("PRAGMA table_info(jobs)")}
+                self.assertIn("updated_at", fields)
+                row = con.execute("SELECT * FROM jobs WHERE id=?", (ident,)).fetchone()
+                self.assertEqual(row["filename"], "older-version.mp4")
+                self.assertEqual(row["status"], "uploading")
+                self.assertIsNotNone(row["updated_at"])
 
     def test_restart_requeues_processing_job_and_filter(self):
         with tempfile.TemporaryDirectory() as tmp:
