@@ -83,6 +83,9 @@
         <select id="theme"><option value="fitness">Fitness / Musculation</option><option value="motivation">Motivation</option><option value="sport">Sport</option><option value="lifestyle">Lifestyle</option><option value="auto">Automatique</option></select>
       </div>
     </div>
+    <label class="setting" for="soundMode">Son des vidéos sources</label>
+    <select id="soundMode"><option value="auto" selected>Auto · couper sauf voix identifiée</option><option value="mute">Couper entièrement les rushs</option><option value="low">Garder le son à 20 %</option></select>
+    <p class="muted">Une musique instrumentale originale est automatiquement ajoutée selon le thème. Les montages sportifs ont des coupes synchronisées au rythme.</p>
     <label class="setting" for="seconds">Durée du montage (secondes)</label>
     <select id="seconds"><option value="0" selected>Auto · selon les meilleures séquences</option><option value="10">10 s · Ultra court</option><option value="15">15 s · Reel express</option><option value="30">30 s · Impact rapide</option><option value="45">45 s · Reel conseillé</option><option value="60">60 s · Narration</option><option value="90">90 s · Plus détaillé</option><option value="180">180 s · Long extrait</option></select>
     <label class="setting" for="backend">Adresse HTTPS du moteur de montage</label><input id="backend" type="url" placeholder="https://api.example.com"><button type="button" class="copy" id="saveBackend" style="margin-top:10px">Enregistrer le moteur</button><label class="setting" for="token" id="tokenLabel" hidden>Clé d'accès (serveur privé uniquement)</label>
@@ -99,7 +102,7 @@
     <h2>Le processus</h2>
     <div class="step"><span class="n">1</span><div><strong>Analyse des rushs</strong><p>Lecture de la vidéo, repérage des changements de plans et des passages parlés.</p></div></div>
     <div class="step"><span class="n">2</span><div><strong>Fusion des meilleurs moments</strong><p>Analyse du mouvement et de la qualité des images : les vidéos sont réorganisées automatiquement pour un rythme progressif, indépendamment de l’ordre d’envoi.</p></div></div>
-    <div class="step"><span class="n">3</span><div><strong>Finition audiovisuelle</strong><p>Encodage H.264, audio AAC, sous-titres si une transcription existe.</p></div></div>
+    <div class="step"><span class="n">3</span><div><strong>Finition musicale</strong><p>Encodage HD, musique instrumentale originale adaptée au thème, son des rushs réduit ou coupé et sous-titres si une transcription existe.</p></div></div>
     <div class="step"><span class="n">4</span><div><strong>Filtres et publication</strong><p>Après le rendu, sélection d’un look conseillé pour le thème, export MP4 final, description et hashtags.</p></div></div>
     <p class="muted">Les choix artistiques avancés, le suivi automatique du sujet et l'étalonnage cinématographique restent des évolutions à valider.</p>
   </aside>
@@ -146,7 +149,7 @@
   let pollFailures = 0;
   const isStatic = location.hostname.endsWith("github.io") || location.hostname.endsWith("shipstatic.com");
   if(isStatic && !API_BASE) { $("mobileHelp").textContent = "Site statique : renseigne d’abord l’adresse HTTPS du moteur de montage. GitHub Pages ne peut pas traiter les vidéos à lui seul."; }
-  const stages = {probe:"Vérification des médias",speech:"Analyse audio",scenes:"Repérage des scènes",quality:"Analyse du mouvement et de la netteté",story:"Construction du montage cohérent",highlights:"Sélection des moments forts",render:"Encodage HD des séquences",queued:"En attente du moteur",done:"Montage terminé",failed:"Échec de production"};
+  const stages = {probe:"Vérification des médias",speech:"Analyse audio",scenes:"Repérage des scènes",quality:"Analyse du mouvement et de la netteté",story:"Construction du montage cohérent",highlights:"Sélection des moments forts",render:"Encodage HD des séquences",music:"Mixage de la musique originale",queued:"En attente du moteur",done:"Montage terminé",failed:"Échec de production"};
   function progress(p,label,message="") {
     $("statusCard").classList.add("active");
     $("stage").textContent = label;
@@ -546,7 +549,12 @@
           : "Sans transcription : aucun sous-titre ni tag vocal inventé.";
         const narrativeLabel = meta.sequence_strategy === "energy_arc" && meta.source_count > 1
           ? "Rushs organisés par intensité visuelle (introduction, montée, pic, conclusion). " : "";
-        $("quality").textContent = durationLabel + modeLabel + narrativeLabel + analysisLabel + captionsLabel;
+        const soundtrack = meta.soundtrack || {};
+        const musicLabel = soundtrack.music_generated
+          ? "Musique originale : " + soundtrack.title + " · " + soundtrack.bpm +
+            " BPM. Son des rushs : " + Math.round((soundtrack.original_audio_volume || 0) * 100) + " %. "
+          : "";
+        $("quality").textContent = durationLabel + modeLabel + narrativeLabel + musicLabel + analysisLabel + captionsLabel;
         return;
       }
       pollTimer = setTimeout(() => poll(id), 2500);
@@ -590,7 +598,8 @@
       body:JSON.stringify({
         project_id:batch.id, upload_ids:ids,
         theme:$("theme").value, aspect:$("aspect").value,
-        seconds:Number($("seconds").value)
+        seconds:Number($("seconds").value),
+        sound_mode:$("soundMode").value
       })});
     localStorage.setItem("lastJob",JSON.stringify({id:job.id,origin:API_BASE}));
     $("resumeJob").style.display = "block";
