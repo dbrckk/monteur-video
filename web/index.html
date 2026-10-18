@@ -270,6 +270,126 @@
     }
     return session.id;
   }
+  let activeJob = null;
+  let selectedPreset = "original";
+  let activePreset = "original";
+  let filterTimer = null;
+  let filterList = [];
+
+  function selectPreset(preset) {
+    const item = filterList.find(option => option.id === preset);
+    if(!item) return;
+    selectedPreset = preset;
+    for(const node of $("filterOptions").children)
+      node.setAttribute("aria-pressed", String(node.dataset.preset === preset));
+    const simulated = selectedPreset !== activePreset;
+    $("resultVideo").style.filter = simulated ? item.css : "none";
+    $("applyFilter").disabled = false;
+    $("applyFilter").textContent = preset === activePreset
+      ? "Filtre déjà appliqué"
+      : (preset === "original" || item.status === "done"
+        ? "Utiliser cette version" : "Appliquer le filtre au MP4");
+    $("applyFilter").disabled = preset === activePreset;
+    $("filterStatus").textContent = simulated
+      ? "L’aperçu affiche une simulation. Le MP4 téléchargé reste inchangé tant que le filtre n’est pas appliqué."
+      : "La vidéo et le téléchargement correspondent au filtre affiché.";
+  }
+  async function loadFilters(id) {
+    const data = await request("/api/jobs/" + encodeURIComponent(id) + "/filters");
+    filterList = data.filters || [];
+    $("filterPanel").style.display = "block";
+    $("filterOptions").replaceChildren();
+    for(const item of filterList) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "filter-choice";
+      button.dataset.preset = item.id;
+      button.setAttribute("aria-pressed", "false");
+      const sample = document.createElement("span");
+      sample.className = "filter-swatch";
+      sample.style.filter = item.css;
+      const title = document.createElement("strong");
+      title.textContent = item.label + (item.recommended ? " · Conseillé" : "");
+      const description = document.createElement("small");
+      description.textContent = item.description;
+      button.append(sample, title, description);
+      button.addEventListener("click", () => selectPreset(item.id));
+      $("filterOptions").append(button);
+    }
+    selectPreset(activePreset);
+  }
+  async function useExport(id, preset) {
+    const suffix = preset === "original" ? "" : "?preset=" + encodeURIComponent(preset);
+    const link = await request("/api/jobs/" + encodeURIComponent(id) + "/download-link" + suffix);
+    const url = apiPath(link.url);
+    activePreset = preset;
+    $("download").href = url;
+    $("download").dataset.expires = String(Date.now() + (link.expires_in - 30) * 1000);
+    $("resultVideo").src = url + "&inline=1";
+    $("resultVideo").style.filter = "none";
+    selectPreset(preset);
+  }
+  async function waitForFilter(id, preset) {
+    clearTimeout(filterTimer);
+    try {
+      const data = await request("/api/jobs/" + encodeURIComponent(id) + "/filters");
+      const item = data.filters.find(entry => entry.id === preset);
+      if(!item) throw new Error("Filtre non disponible.");
+      filterList = data.filters;
+      if(item.status === "done") {
+        await useExport(id, preset);
+        $("filterStatus").textContent = "Filtre " + item.label + " appliqué. MP4 prêt à télécharger.";
+        await loadFilters(id);
+        return;
+      }
+      if(item.status === "failed") throw new Error(item.error || "Échec du filtre");
+      $("filterStatus").textContent = "Export du filtre " + item.label + " en cours…";
+      filterTimer = setTimeout(() => waitForFilter(id, preset), 2500);
+    } catch(error) {
+      $("applyFilter").disabled = false;
+      $("filterStatus").textContent = "Filtre non appliqué : " + error.message + ". L’original est conservé.";
+    }
+  }
+  $("applyFilter").addEventListener("click", async () => {
+    if(!activeJob || selectedPreset === activePreset) return;
+    const preset = selectedPreset;
+    $("applyFilter").disabled = true;
+    try {
+      if(preset === "original" || filterList.find(item=>item.id===preset)?.status === "done") {
+        await useExport(activeJob, preset);
+        return;
+      }
+      $("filterStatus").textContent = "Préparation de la version " + preset + "…";
+      await request("/api/jobs/" + encodeURIComponent(activeJob) + "/filters", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({preset})
+      });
+      await waitForFilter(activeJob, preset);
+    } catch(error) {
+      $("applyFilter").disabled = false;
+      $("filterStatus").textContent = "Erreur du filtre : " + error.message;
+    }
+  });
+  $("download").addEventListener("click", async event => {
+    if(!activeJob || !Number($("download").dataset.expires) ||
+       Date.now() < Number($("download").dataset.expires)) return;
+    event.preventDefault();
+    try {
+      const suffix = activePreset === "original" ? "" : "?preset=" + encodeURIComponent(activePreset);
+      const link = await request("/api/jobs/" + encodeURIComponent(activeJob) + "/download-link" + suffix);
+      const a = document.createElement("a");
+      a.href = apiPath(link.url);
+      a.download = "montage-" + activePreset + ".mp4";
+      document.body.append(a);
+      a.click();
+      a.remove();
+      $("download").href = a.href;
+      $("download").dataset.expires = String(Date.now() + (link.expires_in - 30) * 1000);
+    } catch(error) {
+      $("filterStatus").textContent = "Téléchargement indisponible : " + error.message;
+    }
+  });
+
   async function poll(id) {
     clearTimeout(pollTimer);
     try {
@@ -278,15 +398,14 @@
       progress(p, stages[job.stage] || job.stage, job.status === "processing" ? "Traitement en cours sur le serveur…" : "");
       if(job.status === "failed") throw new Error(job.error || "Erreur de rendu");
       if(job.status === "done") {
+        activeJob = id;
         button.disabled = false;
         button.textContent = "Créer un autre montage →";
         // Keep last finished job for returning mobile users (download later).
         $("resumeJob").style.display = "block";
-        const link = await request("/api/jobs/" + encodeURIComponent(id) + "/download-link");
-        const url = apiPath(link.url);
         $("preview").style.display = "block";
-        $("download").href = url;
-        $("resultVideo").src = url + "&inline=1";
+        await useExport(id, "original");
+        await loadFilters(id);
         const meta = job.metadata || {};
         $("metadata").style.display = "block";
         $("description").value = meta.description || "";
@@ -299,26 +418,40 @@
     } catch(error) { showError(error); }
   }
   button.addEventListener("click",async()=>{
-    const file = input._selectedFile || input.files[0];
-    if(!file) return showError(new Error("Sélectionne une vidéo."));
+    if(!selectedFiles.length) return showError(new Error("Sélectionne au moins une vidéo."));
     button.disabled = true;
     $("message").className = "muted";
     clearTimeout(pollTimer);
-    $("preview").style.display = "none";$("metadata").style.display = "none";
+    clearTimeout(filterTimer);
+    $("preview").style.display = "none";
+    $("metadata").style.display = "none";
+    $("filterPanel").style.display = "none";
+    activeJob = null;
+    selectedPreset = activePreset = "original";
     try {
       await login();
-      progress(0,"Initialisation du transfert");
-      const transfer = await upload(file);
-      const id = transfer.id;
-      localStorage.setItem("lastJob",JSON.stringify({id,origin:API_BASE}));
-      $("resumeJob").style.display="block";
-      if(!transfer.alreadyStarted) {
-        await request("/api/uploads/" + id + "/complete",{method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({theme:$("theme").value,aspect:$("aspect").value,seconds:Number($("seconds").value)})});
+      const batch = loadBatch(selectedFiles);
+      const totalSize = selectedFiles.reduce((sum,file)=>sum+file.size,0);
+      let precedingBytes = 0;
+      const ids = [];
+      for(let i=0;i<selectedFiles.length;i++) {
+        const file = selectedFiles[i];
+        ids.push(await upload(file, i, batch, totalSize, precedingBytes));
+        precedingBytes += file.size;
       }
-      localStorage.removeItem("ongoingUpload");
-      await poll(id);
+      progress(.5,"Tous les rushs envoyés","Lancement du montage commun");
+      const job = await request("/api/montages", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          project_id:batch.id, upload_ids:ids,
+          theme:$("theme").value, aspect:$("aspect").value,
+          seconds:Number($("seconds").value)
+        })});
+      localStorage.setItem("lastJob",JSON.stringify({id:job.id,origin:API_BASE}));
+      $("resumeJob").style.display = "block";
+      localStorage.removeItem("ongoingUploads");
+      localStorage.removeItem("ongoingMontage");
+      await poll(job.id);
     }catch(error){showError(error);}
   });
   $("copy").addEventListener("click",async()=>{
