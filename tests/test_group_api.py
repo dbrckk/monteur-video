@@ -62,7 +62,11 @@ class MultiVideoApiTests(unittest.TestCase):
                 Path(tmp, project_id, "final.mp4").write_bytes(b"finished")
                 with server.database() as con:
                     con.execute("INSERT INTO filter_exports(job_id,preset,status) "
-                                "VALUES(?,?,'done')", (project_id, "impact"))
+                                "VALUES(?,?,'queued')", (project_id, "impact"))
+                self.assertEqual(client.delete(f"/api/jobs/{project_id}").status_code, 409)
+                server.update_filter(project_id, "impact", status="processing")
+                self.assertEqual(client.delete(f"/api/jobs/{project_id}").status_code, 409)
+                server.update_filter(project_id, "impact", status="done")
                 (Path(tmp) / project_id / "filters").mkdir()
                 (Path(tmp) / project_id / "filters" / "impact.mp4").write_bytes(b"filtered")
                 deleted = client.delete(f"/api/jobs/{project_id}")
@@ -130,6 +134,13 @@ class MultiVideoApiTests(unittest.TestCase):
                 self.assertEqual(client.get(original.json()["url"]).content, b"original_mp4")
                 self.assertEqual(client.get(original.json()["url"] + "&inline=1").headers[
                     "content-disposition"].split(";")[0], "inline")
+                # Regenerate a filter if the indexed export has vanished.
+                (Path(tmp) / ident / "filters" / "impact.mp4").unlink()
+                with patch.object(server.POOL, "submit") as submit:
+                    retry = client.post(filters_url, headers=auth, json={"preset": "impact"})
+                    self.assertEqual(retry.status_code, 202)
+                    self.assertEqual(retry.json()["status"], "queued")
+                    self.assertEqual(submit.call_count, 1)
 
     def test_local_server_serves_mobile_pwa_assets(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
