@@ -507,6 +507,11 @@ def create_montage(data: MontageRequest):
                 return {"id": ident, "status": existing["status"],
                         "source_count": len(ids), "reused": True}
             raise HTTPException(status_code=409, detail="Identifiant de montage déjà utilisé")
+        if PUBLIC_DEMO:
+            active_renders = con.execute(
+                "SELECT COUNT(*) FROM jobs WHERE status IN ('queued','processing')").fetchone()[0]
+            if active_renders >= PUBLIC_MAX_ACTIVE:
+                raise HTTPException(status_code=429, detail="Moteur occupé, réessayer le montage plus tard")
         rows = {
             row["id"]: row
             for row in con.execute(
