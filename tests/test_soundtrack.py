@@ -7,7 +7,7 @@ import unittest
 import wave
 from pathlib import Path
 
-from soundtrack import SOUND_LEVELS, TRACKS, add_soundtrack, beat_duration, create_original_beat
+from soundtrack import SOUND_LEVELS, TRACKS, add_soundtrack, beat_duration, create_original_beat, prepare_instagram_reel
 from editor import probe_media
 
 
@@ -69,6 +69,29 @@ class MixFFmpegTests(unittest.TestCase):
                     self.assertEqual(codec, "aac")
                     self.assertFalse(list(work.glob("*.partial.mp4")))
                     self.assertFalse(list(work.glob("*.original-beat.wav")))
+
+    def test_instagram_mode_removes_source_audio_without_embedding_a_commercial_track(self):
+        with tempfile.TemporaryDirectory() as root:
+            file = Path(root) / "reel.mp4"
+            self.video(file)
+            result = prepare_instagram_reel(file, sound_mode="auto", voice_present=False)
+            self.assertFalse(result["music_embedded"])
+            self.assertEqual(result["original_audio_volume"], 0)
+            self.assertEqual(result["mode"], "instagram_native")
+            probe = subprocess.check_output([
+                "ffprobe", "-v", "error", "-select_streams", "a",
+                "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(file)
+            ], text=True).strip()
+            self.assertEqual(probe, "")
+            self.assertTrue(file.stat().st_size > 4000)
+            self.video(file)
+            result = prepare_instagram_reel(file, sound_mode="low", voice_present=False)
+            self.assertEqual(result["original_audio_volume"], 0.2)
+            probe = subprocess.check_output([
+                "ffprobe", "-v", "error", "-select_streams", "a:0",
+                "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(file)
+            ], text=True).strip()
+            self.assertEqual(probe, "aac")
 
     def test_invalid_sound_mode_rejected(self):
         with tempfile.TemporaryDirectory() as root:
