@@ -205,3 +205,9 @@ Le mode **Auto** peut proposer un montage de 10 ou 15 secondes, même à partir 
 Ces heuristiques **ne reconnaissent pas réellement** les exercices, les personnes ou les mouvements sportifs, et un mouvement de caméra peut être confondu avec l'action. Elles aident à choisir les plans, mais ne garantissent pas la détection du meilleur instant. La résolution publique reste **720p HD**, en portrait ou paysage.
 
 <!-- Stabilisation : validation CI du classement musical par tempo vérifié. -->
+
+## Détection des phases d'action sportive
+
+Le moteur regroupe les échantillons de mouvement adjacents pour distinguer des **séquences d'activité soutenue** des temps plus calmes. Les extraits qui recouvrent effectivement une phase d'action mesurée reçoivent une priorité accrue, sans réordonner les instants à l'intérieur d'un rush. Les intervalles non échantillonnés ne sont jamais fusionnés comme s'ils avaient été observés. La sortie contient les bornes et scores de confiance des phases détectées.
+
+Pour les exercices, un nom comme « squat » ou « développé couché » n'est renseigné que s'il est mentionné explicitement dans une transcription disponible. **Le mouvement de caméra seul n'identifie ni le type d'exercice, ni le nombre de répétitions, ni la pose d'une personne.** Ces fonctions demanderaient un détecteur de pose validé, une localisation corporelle et des tests sur de véritables vidéos d'entraînement ; aucun résultat n'est inventé en leur absence. L'analyse actuelle réutilise les mesures FFmpeg existantes et fonctionne sur l'hébergement gratuit.

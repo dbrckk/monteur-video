@@ -201,7 +201,8 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
                transcript: list[dict], target_seconds: float = 45,
                allow_short: bool = False,
                visual_samples: list | None = None,
-               beat_seconds: float | None = None) -> list[Clip]:
+               beat_seconds: float | None = None,
+               action_bouts: list[dict] | None = None) -> list[Clip]:
     """Select highlights across the entire recording, respecting pauses and visual cuts.
 
     Stratified buckets prevent a long, low-dialogue video from collapsing into its
@@ -250,6 +251,9 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
                     cursor = stop
                     continue
                 score += quality_bonus
+            if action_bouts:
+                from action_story import candidate_action_score
+                score += candidate_action_score(cursor, stop, action_bouts)
             candidates.append(Clip(round(cursor, 3), round(stop, 3), score))
             cursor = stop
     if not candidates:
@@ -456,9 +460,12 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
         grade_filter = grade_plan([visual_samples or []], theme)["source_grades"][0]["filter"]
     from soundtrack import beat_duration
     beat_grid = (60.0 / music_profile["bpm"] if music_profile else beat_duration(theme)) if theme in {"fitness", "sport"} else None
+    from action_story import narrative_signals
+    action_story = narrative_signals(visual_samples or [], transcript, info["duration"])
     clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
                        allow_short=allow_short, visual_samples=visual_samples,
-                       beat_seconds=beat_grid)
+                       beat_seconds=beat_grid,
+                       action_bouts=action_story["action_bouts"])
     from color_grade import adaptive_shot_filters
     shot_filters = adaptive_shot_filters(visual_samples or [], clips, theme,
                                         shared_grade=color_reference,
@@ -472,6 +479,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                      "speech_engine": asr_mode, "captions_generated": bool(selected_speech),
                      "selected_transcript": selected_speech,
                      "scene_count": len(scenes),
+                     "action_story": action_story,
                      "visual_analysis": "motion_luminance_detail" if visual_samples else "unavailable",
                      "cut_style": "beat_synced" if beat_grid else "editorial",
                      "auto_color_grading": any(bool(v) for v in shot_filters),
