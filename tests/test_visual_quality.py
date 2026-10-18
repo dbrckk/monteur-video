@@ -34,6 +34,14 @@ class VisualScoringTests(unittest.TestCase):
         clips = plan_clips(45, [], [], [], 10, visual_samples=frozen)
         self.assertAlmostEqual(sum(x.duration for x in clips), 10, places=2)
 
+    def test_silent_workout_survives_unavailable_visual_analysis(self):
+        clips = plan_clips(30, [], [(0, 29)], [], 10, visual_samples=[])
+        self.assertTrue(clips)
+        self.assertLessEqual(sum(c.duration for c in clips), 10.01)
+        self.assertGreater(sum(c.duration for c in clips), 5)
+        # No motion analysis must not restrict selection to the last second.
+        self.assertTrue(any(c.start < 20 for c in clips))
+
     def test_selects_silent_action_not_black_opener(self):
         samples = [VisualSample(i * 0.5, 16 if i < 6 else 120,
                                 0 if i < 6 else 9,
