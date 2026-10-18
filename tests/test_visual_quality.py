@@ -29,6 +29,11 @@ class VisualScoringTests(unittest.TestCase):
                            clip_quality(blurred, 0, 5)[0])
         self.assertFalse(clip_quality(blurred, 0, 5)[1])
 
+    def test_all_bad_frames_fallback_stays_within_target(self):
+        frozen = [VisualSample(i * 0.5, 16, 0, 0) for i in range(90)]
+        clips = plan_clips(45, [], [], [], 10, visual_samples=frozen)
+        self.assertAlmostEqual(sum(x.duration for x in clips), 10, places=2)
+
     def test_selects_silent_action_not_black_opener(self):
         samples = [VisualSample(i * 0.5, 16 if i < 6 else 120,
                                 0 if i < 6 else 9,
