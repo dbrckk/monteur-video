@@ -16,6 +16,18 @@ class AutomaticDurationTests(unittest.TestCase):
         self.assertEqual(automatic_duration([80]), 45)
         self.assertEqual(automatic_duration([180]), 60)
 
+    def test_scene_aware_short_reels(self):
+        self.assertEqual(automatic_duration([120], [45]), 15)
+        self.assertEqual(automatic_duration([120], [22]), 30)
+        self.assertEqual(automatic_duration([120], [0]), 60)
+        self.assertEqual(automatic_duration([80], [25]), 15)
+        self.assertEqual(automatic_duration([50], [9]), 30)
+
+    def test_invalid_scene_analysis(self):
+        for counts in ([], [-1], [1, 2]):
+            with self.assertRaises(ValueError):
+                automatic_duration([80], counts)
+
     def test_no_padding(self):
         self.assertAlmostEqual(sum(allocation([6, 6], automatic_duration([6, 6]))), 10)
         self.assertAlmostEqual(sum(allocation([4, 4], automatic_duration([4, 4]))), 8)
