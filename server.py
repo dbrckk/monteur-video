@@ -33,7 +33,7 @@ COOKIE_VALUE = hmac.new(API_TOKEN.encode(), b"monteur-session-v1", hashlib.sha25
 DOWNLOAD_SECRET = hmac.new(API_TOKEN.encode(), b"monteur-download-v1", hashlib.sha256).digest()
 DOWNLOAD_TTL_SECONDS = 15 * 60
 CORS_ORIGINS = sorted(set(
-    ["https://dbrckk.github.io"] +
+    ["https://dbrckk.github.io", "https://angled-gate-srzt937.shipstatic.com"] +
     [origin.strip().rstrip("/") for origin in os.environ.get("MONTEUR_CORS_ORIGINS", "").split(",") if origin.strip()]
 ))
 if any(not origin.startswith("https://") or "*" in origin for origin in CORS_ORIGINS):
