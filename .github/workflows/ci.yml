@@ -17,6 +17,10 @@ jobs:
           sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+      - name: Validate public deployment scripts
+        run: |
+          bash -n scripts/start-public.sh
+          APP_API_TOKEN=0123456789abcdef0123456789abcdef docker compose -f compose.yaml -f compose.public.yaml --profile public config -q
       - name: Compile Python modules
         run: python -m compileall -q editor.py montage.py server.py tests
       - name: Run unit, API and real render tests
