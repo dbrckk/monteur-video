@@ -58,6 +58,12 @@ class MobileApiTests(unittest.TestCase):
                                  "https://snappy-gate-x58qpre.shipstatic.com")
 
                 token = {"Authorization": "Bearer strong-example-token-123"}
+                self.assertEqual(client.get("/api/session").status_code, 401)
+                session = client.get("/api/session", headers=token)
+                self.assertEqual(session.status_code, 200)
+                self.assertEqual(session.json()["version"], "1.0.0")
+                self.assertEqual(session.json()["max_sources"], 10)
+                self.assertIn("free_disk_bytes", session.json())
                 response = client.post(path, json=payload, headers=token)
                 self.assertEqual(response.status_code, 201)
                 ident = response.json()["id"]

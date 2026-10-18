@@ -1,14 +1,14 @@
 # Monteur Studio — montage automatique fitness / motivation
 
-Application web **locale** construite pour produire de vrais montages à partir de longues vidéos, et non de démonstrations synthétiques. Importation de **1 à 10 vidéos pour un seul montage**, reprenable par blocs de 8 Mio, analyse FFmpeg des scènes et silences, transcription facultative via faster-whisper, assemblage des clips issus de chaque rush, incrustation de sous-titres, filtres colorimétriques sélectionnables **après le premier rendu**, export **9:16 (Instagram/Reels/Shorts)** ou **16:9 (YouTube)** en H.264/AAC, description française et hashtags.
+Application web **mobile-first** avec moteur local ou distant sécurisé, construite pour produire de vrais montages à partir de longues vidéos, et non de démonstrations synthétiques. Importation de **1 à 10 vidéos pour un seul montage**, reprenable par blocs de 8 Mio, analyse FFmpeg des scènes et silences, transcription facultative via faster-whisper, assemblage des clips issus de chaque rush, incrustation de sous-titres, filtres colorimétriques sélectionnables **après le premier rendu**, export **9:16 (Instagram/Reels/Shorts)** ou **16:9 (YouTube)** en H.264/AAC, description française et hashtags.
 
-**État : première version bêta.** Ce moteur n'est pas encore un éditeur haut de gamme entièrement automatique. Le recadrage est centré et non intelligent ; la sélection des moments forts repose sur des heuristiques, et aucune musique ou effet visuel tiers n'est injecté sans droits. Les fonctions sont soumises à une CI qui tente un véritable encodage des deux formats.
+**État : V1 fonctionnelle et validée en tests, sous réserve de disposer d'un ordinateur hébergeant le moteur.** Ce moteur n'est pas encore un éditeur haut de gamme entièrement automatique. Le recadrage est centré et non intelligent ; la sélection des moments forts repose sur des heuristiques, et aucune musique ou effet visuel tiers n'est injecté sans droits. Les fonctions sont soumises à une CI qui tente un véritable encodage des deux formats.
 
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.
 
-**Important :** les deux hébergeurs statiques ne peuvent pas traiter des vidéos. Il reste à connecter un moteur de montage HTTPS.
+**Important :** les deux hébergeurs statiques ne traitent pas les vidéos. Le moteur FFmpeg se lance maintenant gratuitement sur votre PC avec un tunnel HTTPS et une clé secrète créée automatiquement. Il faut garder cet ordinateur allumé pendant le traitement.
 
 
 
@@ -18,11 +18,13 @@ L'interface statique est **déjà publiée sur https://dbrckk.github.io/monteur-
 
 L'interface seule ne peut pas produire le montage : il faut connecter par HTTPS un serveur personnel qui exécute FFmpeg et Whisper. Les requêtes depuis GitHub Pages sont autorisées par CORS explicite et nécessitent `APP_API_TOKEN` dans l'en-tête Authorization. Les téléchargements passent par un lien temporaire signé ; la clé API n'apparaît pas dans l'URL.
 
-Lire **[le guide d'hébergement statique et d'utilisation Android](docs/STATIC_HOSTING.md)** pour le fonctionnement, la sécurité et les limites (notamment : envoi non garanti lorsque l'onglet est fermé).
+**[Guide de démarrage V1 Android + moteur gratuit en HTTPS](docs/REMOTE_ANDROID.md)** : une commande Linux/macOS ou Windows, clé API générée, Cloudflare Quick Tunnel temporaire. En option, Tailscale Funnel permet de conserver une adresse HTTPS stable avec un compte Personal gratuit. **[Documentation technique de l'hébergement statique](docs/STATIC_HOSTING.md)**.
 
 
 
-Docker et Docker Compose sont installés sur l'ordinateur qui héberge l'application, pas sur le téléphone Android.
+## Démarrer le moteur Docker sur PC
+
+Docker et Docker Compose v2 s'installent sur l'ordinateur qui héberge l'application, pas sur le téléphone Android.
 
 ~~~bash
 git clone https://github.com/dbrckk/monteur-video.git
@@ -30,7 +32,13 @@ cd monteur-video
 docker compose up --build -d
 ~~~
 
-Ouvrir http://localhost:8000 sur la machine hôte. Pour Android, utiliser un reverse proxy HTTPS avec contrôle d'accès devant le serveur. Ne pas exposer une instance non protégée à Internet. Compose publie uniquement sur l'interface localhost.
+Ouvrir http://localhost:8000 sur la machine hôte. Pour utiliser **le site public Android** avec ce moteur sans configurer de routeur, utiliser le script de démarrage gratuit :
+
+~~~bash
+bash scripts/start-free.sh
+~~~
+
+Sur Windows : `powershell -ExecutionPolicy Bypass -File .\\scripts\\start-free.ps1`. Pour une adresse HTTPS Tailscale plus stable : `bash scripts/start-stable.sh` (nécessite l'installation et l'authentification à Tailscale). Les scripts générent `APP_API_TOKEN` et affichent l'adresse HTTPS à renseigner dans le site Android. Les URL Quick Tunnel peuvent changer et n'ont pas de garantie de disponibilité. Compose seul continue de publier uniquement sur localhost par sécurité.
 
 Pour protéger l'API par session, créer un fichier local nommé .env :
 
@@ -79,7 +87,14 @@ Sous Windows activer l'environnement virtuel dans le dossier Scripts. Une instal
 4. GET /api/jobs/{id} expose la progression, le moteur de transcription réellement utilisé, les clips sélectionnés, la description et les hashtags.
 5. GET /api/jobs/{id}/download-link renvoie une URL MP4 signée valide pendant 15 minutes ; ajouter `?preset=<id>` pour choisir une version filtrée terminée. Le ticket est lié à l'identifiant du preset : il ne permet pas d'obtenir d'autres versions. DELETE /api/jobs/{id} supprime montage, originaux consommés et variantes terminées.
 
-La durée d'entrée n'a pas de plafond artificiel. La taille maximale par fichier (20 Gio par défaut) dépend aussi de l'espace disque disponible ; 10 fichiers de grande taille peuvent réclamer beaucoup d'espace. Le client envoie plusieurs vidéos dans le même projet, **séquentiellement** pour limiter la mémoire et les interruptions sur Android, pas simultanément sur le réseau. Les longues sources restent coûteuses à décoder et à transcrire. SQLite persiste les états ; les tâches mises en file reprennent après un redémarrage, tandis qu'une tâche interrompue en plein rendu passe en état échec. Un seul rendu s'exécute simultanément pour protéger la mémoire. Les fichiers source sont conservés tant que l'utilisateur ne les supprime pas.
+La durée d'entrée n'a pas de plafond artificiel. La taille maximale par fichier (20 Gio par défaut) dépend aussi de l'espace disque disponible ; 10 fichiers de grande taille peuvent réclamer beaucoup d'espace. Le client envoie plusieurs vidéos dans le même projet, **séquentiellement** pour limiter la mémoire et les interruptions sur Android, pas simultanément sur le réseau. Les longues sources restent coûteuses à décoder et à transcrire. SQLite persiste les états ; **les tâches en file d'attente et les montages/filtres interrompus sont remis en file après un redémarrage** du moteur. En cas d'échec de traitement, `POST /api/jobs/{id}/retry` permet de relancer le montage sans recharger les rushs, si les sources sont encore présentes. Un seul rendu s'exécute simultanément pour protéger la mémoire. Les sources et exports sont conservés **14 jours par défaut** après la fin du traitement (et 72 heures pour les envois abandonnés), ou jusqu'à leur suppression manuelle. Les durées sont configurables via `RESULT_TTL_DAYS` et `UPLOAD_TTL_HOURS`.
+
+## API supplémentaire (V1)
+
+- `GET /api/session` (authentifié) : test du moteur, version, limites d'import et espace disque.
+- `POST /api/jobs/{id}/retry` (authentifié) : relance idempotente d'un job en échec, sans nouvel envoi depuis Android.
+- `GET /api/jobs/{id}` inclut `expires_at` pour la date limite de récupération des fichiers.
+- `GET /api/health` : vérification technique locale et Docker Healthcheck.
 
 ## Limites connues et prochaines phases
 
@@ -97,7 +112,7 @@ python -m compileall -q editor.py montage.py server.py tests
 python -m unittest discover -s tests -v
 ~~~
 
-Le test d'intégration fabrique une courte vidéo source avec FFmpeg, produit réellement un MP4 vertical et un MP4 horizontal puis vérifie les dimensions par ffprobe. Un autre test examine l'importation reprenable, les offsets, la validation et la mise en file. GitHub Actions exécute ces contrôles à chaque push.
+La suite de validation fabrique des vidéos sources réelles avec FFmpeg, produit les formats verticaux/horizontaux, assemble deux rushs avec et sans son puis teste les six filtres. Un test de bout en bout simule le smartphone avec l'API HTTP (création et reprise des imports, projet, rendu FFmpeg, filtre, lien signé, suppression). Le workflow Docker construit une image légère et **démarre vraiment l'API protégée** ; le workflow de production installe Whisper dans l'image complète. Les tests de reprise et de purge vérifient le comportement après redémarrage. Un autre test examine l'importation reprenable, les offsets, la validation et la mise en file. GitHub Actions exécute ces contrôles à chaque push.
 
 ## Composants et recherche
 

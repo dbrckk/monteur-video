@@ -1,0 +1,12 @@
+# Optional, free remote-access overlay: Docker host performs all processing.
+# Cloudflare Quick Tunnels are temporary and have no production uptime SLA.
+services:
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://monteur:8000
+    depends_on:
+      monteur:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true

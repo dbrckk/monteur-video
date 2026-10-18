@@ -1,11 +1,15 @@
 import os
+import sys
+from types import SimpleNamespace
+from unittest.mock import patch
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from editor import Clip, active_ranges, create_captions, edit_video, plan_clips, social_metadata
+from editor import (Clip, active_ranges, create_captions, edit_video, plan_clips,
+                    social_metadata, load_whisper_model, speech_to_text)
 
 
 class PlanningTests(unittest.TestCase):
@@ -45,6 +49,28 @@ class PlanningTests(unittest.TestCase):
         self.assertIn("squat", info["hashtags"])
         self.assertIn("cardio", info["hashtags"])
         self.assertTrue(info["transcript_used"])
+
+    def test_whisper_model_reused_across_multiple_rushes(self):
+        constructions = []
+        class FakeWhisper:
+            def __init__(self, model_name, device, compute_type):
+                constructions.append((model_name, device, compute_type))
+            def transcribe(self, path, **kwargs):
+                return [SimpleNamespace(
+                    start=0.2, end=1.6, text="  Je continue ma progression  ")], None
+        load_whisper_model.cache_clear()
+        try:
+            with patch.dict(sys.modules, {
+                    "faster_whisper": SimpleNamespace(WhisperModel=FakeWhisper)
+            }), patch.dict(os.environ, {"WHISPER_MODEL": "tiny",
+                                        "WHISPER_DEVICE": "cpu"}):
+                a, engine_a = speech_to_text(Path("first.mp4"))
+                b, engine_b = speech_to_text(Path("second.mp4"))
+                self.assertEqual((engine_a, engine_b), ("whisper", "whisper"))
+                self.assertEqual(a, b)
+                self.assertEqual(len(constructions), 1)
+        finally:
+            load_whisper_model.cache_clear()
 
     def test_caption_file(self):
         with tempfile.TemporaryDirectory() as tmp:

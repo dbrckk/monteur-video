@@ -1,0 +1,69 @@
+name: V1 Docker deployment smoke
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'compose.yaml'
+      - 'compose.remote.yaml'
+      - 'requirements*.txt'
+      - 'editor.py'
+      - 'montage.py'
+      - 'server.py'
+      - 'scripts/**'
+      - '.github/workflows/docker-smoke.yml'
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate tunnel Compose and startup scripts
+        run: |
+          bash -n scripts/start-free.sh scripts/start-stable.sh
+          docker compose -f compose.yaml -f compose.remote.yaml config --quiet
+      - name: Build working FFmpeg engine container (light mode)
+        run: docker build --build-arg INSTALL_WHISPER=0 -t monteur-v1:ci .
+      - name: Boot the real API container with a private token
+        run: |
+          docker run -d --name monteur-v1-smoke \
+            -e APP_API_TOKEN=smoke-test-secret-example-length-1234 \
+            -p 127.0.0.1:18000:8000 monteur-v1:ci
+          for _ in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:18000/api/health > /tmp/monteur-health.json; then
+              break
+            fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import json
+          with open('/tmp/monteur-health.json', encoding='utf-8') as handle:
+              data = json.load(handle)
+          assert data['ok'] is True, data
+          assert data['version'] == '1.0.0', data
+          assert data['max_sources'] == 10, data
+          PY
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18000/api/session)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' \
+            -H 'Authorization: Bearer smoke-test-secret-example-length-1234' \
+            http://127.0.0.1:18000/api/session)" = 200
+          docker inspect --format '{{.State.Health.Status}}' monteur-v1-smoke
+      - name: Capture container logs
+        if: always()
+        run: docker logs monteur-v1-smoke || true
+      - name: Remove smoke container
+        if: always()
+        run: docker rm -f monteur-v1-smoke || true
+
+  ai-runtime:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image with real faster-whisper installed
+        run: docker build --build-arg INSTALL_WHISPER=1 -t monteur-v1:ai .
+      - name: Verify CPU ASR model can actually initialize
+        run: |
+          docker run --rm --entrypoint python monteur-v1:ai \
+            -c "from faster_whisper import WhisperModel; m=WhisperModel('tiny', device='cpu', compute_type='int8'); print('CPU ASR OK')"

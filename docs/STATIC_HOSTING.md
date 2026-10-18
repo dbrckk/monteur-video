@@ -1,5 +1,7 @@
 # Site statique gratuit : Android en priorité
 
+**Pour démarrer réellement le moteur V1 depuis un ordinateur avec HTTPS et une clé secrète générée automatiquement, lire [le guide Android + moteur gratuit](REMOTE_ANDROID.md).** Ce document précise aussi les scripts Linux/macOS et Windows, la reprise des rendus et la conservation des médias.
+
 **Site principal gratuit en ligne et vérifié :** https://dbrckk.github.io/monteur-video/ (1 à 10 vidéos, choix de l'ordre et filtres après montage).
 
 **Miroir gratuit :** https://snappy-gate-x58qpre.shipstatic.com

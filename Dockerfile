@@ -4,11 +4,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certi
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements-ai.txt requirements.txt ./
-RUN pip install --no-cache-dir -r requirements-ai.txt
+# Full image uses Whisper CPU; CI/light installs remain FFmpeg-functional.
+ARG INSTALL_WHISPER=1
+RUN if [ "$INSTALL_WHISPER" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-ai.txt; \
+    else \
+      pip install --no-cache-dir -r requirements.txt; \
+    fi
 COPY editor.py montage.py server.py ./
 COPY web/ ./web/
 RUN useradd -m -u 10001 appuser && mkdir -p /data && chown appuser:appuser /data
 USER appuser
 ENV EDITOR_DATA_DIR=/data WHISPER_MODEL=base WHISPER_DEVICE=cpu
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=4).read()" || exit 1
 EXPOSE 8000
 CMD ["uvicorn","server:app","--host","0.0.0.0","--port","8000","--workers","1"]

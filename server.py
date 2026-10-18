@@ -10,8 +10,8 @@ import shutil
 import sqlite3
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timedelta, timezone
 from time import time
 from pathlib import Path
 
@@ -29,6 +29,9 @@ DB = ROOT / "jobs.sqlite3"
 WEB = Path(__file__).resolve().parent / "web" / "index.html"
 MAX_SIZE = int(float(os.environ.get("MAX_UPLOAD_GB", "20")) * 1024 ** 3)
 CHUNK_LIMIT = 16 * 1024 * 1024
+UPLOAD_TTL_HOURS = max(1, int(os.environ.get("UPLOAD_TTL_HOURS", "72")))
+RESULT_TTL_DAYS = max(1, int(os.environ.get("RESULT_TTL_DAYS", "14")))
+CLEANUP_INTERVAL_SECONDS = 6 * 3600
 API_TOKEN = os.environ.get("APP_API_TOKEN", "")
 COOKIE_VALUE = hmac.new(API_TOKEN.encode(), b"monteur-session-v1", hashlib.sha256).hexdigest()
 DOWNLOAD_SECRET = hmac.new(API_TOKEN.encode(), b"monteur-download-v1", hashlib.sha256).digest()
@@ -57,23 +60,81 @@ def initialize() -> None:
             id TEXT PRIMARY KEY, filename TEXT NOT NULL, status TEXT NOT NULL,
             expected_size INTEGER NOT NULL, stage TEXT NOT NULL DEFAULT 'upload',
             progress REAL NOT NULL DEFAULT 0, error TEXT, options TEXT,
-            metadata TEXT, created_at TEXT NOT NULL
+            metadata TEXT, created_at TEXT NOT NULL, updated_at TEXT
         )""")
-        con.execute("UPDATE jobs SET status='failed', error='Traitement interrompu par un redémarrage' "
+        # SQLite migration: keep existing users' projects when upgrading.
+        cols = {row["name"] for row in con.execute("PRAGMA table_info(jobs)")}
+        if "updated_at" not in cols:
+            con.execute("ALTER TABLE jobs ADD COLUMN updated_at TEXT")
+        con.execute("UPDATE jobs SET updated_at=created_at WHERE updated_at IS NULL")
+        # Renders interrupted by a restart are retried from their saved source files.
+        con.execute("UPDATE jobs SET status='queued', stage='queued', progress=0, error=NULL "
                     "WHERE status='processing'")
         con.execute("""CREATE TABLE IF NOT EXISTS filter_exports (
             job_id TEXT NOT NULL, preset TEXT NOT NULL,
             status TEXT NOT NULL, progress REAL NOT NULL DEFAULT 0,
             error TEXT, PRIMARY KEY(job_id, preset)
         )""")
-        con.execute("UPDATE filter_exports SET status='failed', "
-                    "error='Application du filtre interrompue par un redémarrage' "
+        con.execute("UPDATE filter_exports SET status='queued', progress=0, error=NULL "
                     "WHERE status='processing'")
+
+
+def cleanup_expired(now: datetime | None = None) -> int:
+    """Prune abandoned uploads and old completed jobs, never live jobs/renders.
+
+    All DB changes happen in one transaction; file deletion follows the commit.
+    A consumed source is deleted only with its parent montage.
+    """
+    now = now or datetime.now(timezone.utc)
+    to_remove: list[str] = []
+    with database() as con:
+        con.execute("BEGIN IMMEDIATE")
+        rows = list(con.execute(
+            "SELECT id,status,created_at,updated_at,options FROM jobs "
+            "WHERE status IN ('uploading','done','failed')"))
+        for row in rows:
+            try:
+                stamp = datetime.fromisoformat(row["updated_at"] or row["created_at"])
+                if stamp.tzinfo is None:
+                    stamp = stamp.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                continue
+            cutoff = (timedelta(hours=UPLOAD_TTL_HOURS)
+                      if row["status"] == "uploading"
+                      else timedelta(days=RESULT_TTL_DAYS))
+            if now - stamp < cutoff:
+                continue
+            # Prevent deleting a master whose filter still needs it.
+            active = con.execute(
+                "SELECT COUNT(*) FROM filter_exports WHERE job_id=? "
+                "AND status IN ('queued','processing')", (row["id"],)).fetchone()[0]
+            if active:
+                continue
+            options = json.loads(row["options"]) if row["options"] else {}
+            sources = options.get("sources", []) if isinstance(options, dict) else []
+            con.execute("DELETE FROM filter_exports WHERE job_id=?", (row["id"],))
+            con.execute("DELETE FROM jobs WHERE id=?", (row["id"],))
+            to_remove.append(row["id"])
+            for source_id in sources:
+                cur = con.execute("DELETE FROM jobs WHERE id=? AND status='consumed'",
+                                  (source_id,))
+                if cur.rowcount:
+                    to_remove.append(source_id)
+    for ident in to_remove:
+        shutil.rmtree(ROOT / ident, ignore_errors=True)
+    return len(to_remove)
+
+
+async def periodic_cleanup() -> None:
+    while True:
+        await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
+        await asyncio.to_thread(cleanup_expired)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize()
+    cleanup_expired()
     with database() as con:
         pending = [x["id"] for x in con.execute("SELECT id FROM jobs WHERE status='queued'")]
     for ident in pending:
@@ -83,10 +144,16 @@ async def lifespan(app: FastAPI):
             "SELECT job_id, preset FROM filter_exports WHERE status='queued'"))
     for item in filters:
         POOL.submit(run_filter, item["job_id"], item["preset"])
-    yield
+    janitor = asyncio.create_task(periodic_cleanup())
+    try:
+        yield
+    finally:
+        janitor.cancel()
+        with suppress(asyncio.CancelledError):
+            await janitor
 
 
-app = FastAPI(title="Monteur Video", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Monteur Video", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -178,12 +245,12 @@ def source_path(ident: str) -> Path:
 
 def update_job(ident: str, **fields: object) -> None:
     allowed = {"status", "stage", "progress", "error", "metadata", "options"}
-    if not fields.keys() <= allowed:
+    if not fields or not fields.keys() <= allowed:
         raise ValueError("Mise à jour non autorisée")
     updates = ", ".join(f"{key}=?" for key in fields)
     with database() as con:
-        con.execute(f"UPDATE jobs SET {updates} WHERE id=?",
-                    (*fields.values(), ident))
+        con.execute(f"UPDATE jobs SET {updates}, updated_at=? WHERE id=?",
+                    (*fields.values(), datetime.now(timezone.utc).isoformat(), ident))
 
 
 def run_job(ident: str) -> None:
@@ -279,7 +346,20 @@ def mobile_service_worker():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "transcription_optional": True, "max_upload_bytes": MAX_SIZE}
+    return {"ok": True, "version": app.version, "transcription_optional": True,
+            "max_upload_bytes": MAX_SIZE, "max_sources": MAX_SOURCES,
+            "upload_ttl_hours": UPLOAD_TTL_HOURS,
+            "result_ttl_days": RESULT_TTL_DAYS}
+
+
+@app.get("/api/session", dependencies=[Depends(authorize)])
+def session_info():
+    """Authenticated readiness check for remote mobile clients."""
+    return {"ok": True, "version": app.version,
+            "max_sources": MAX_SOURCES, "max_upload_bytes": MAX_SIZE,
+            "free_disk_bytes": shutil.disk_usage(ROOT).free,
+            "upload_ttl_hours": UPLOAD_TTL_HOURS,
+            "result_ttl_days": RESULT_TTL_DAYS}
 
 
 @app.post("/api/login")
@@ -308,9 +388,9 @@ def begin_upload(data: UploadRequest):
     source_path(ident).touch(mode=0o600)
     now = datetime.now(timezone.utc).isoformat()
     with database() as con:
-        con.execute("INSERT INTO jobs(id,filename,status,expected_size,stage,created_at)"
-                    "VALUES(?,?,?,?,?,?)",
-                    (ident, Path(data.filename).name, "uploading", data.size, "upload", now))
+        con.execute("INSERT INTO jobs(id,filename,status,expected_size,stage,created_at,updated_at)"
+                    "VALUES(?,?,?,?,?,?,?)",
+                    (ident, Path(data.filename).name, "uploading", data.size, "upload", now, now))
     return {"id": ident, "offset": 0, "size": data.size}
 
 
@@ -356,20 +436,29 @@ async def append_chunk(ident: str, request: Request):
             except BaseException:
                 stream.truncate(offset)
                 raise
+        update_job(job["id"], progress=round((offset + written) / job["expected_size"], 3))
         return {"offset": offset + written, "size": job["expected_size"]}
 
 
 @app.post("/api/uploads/{ident}/complete", dependencies=[Depends(authorize)])
 def complete_upload(ident: str, data: ExportRequest):
     job = get_job(ident)
-    if job["status"] != "uploading":
-        raise HTTPException(status_code=409, detail="Fichier déjà validé")
     if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"}:
         raise HTTPException(status_code=422, detail="Configuration inconnue")
-    if source_path(job["id"]).stat().st_size != job["expected_size"]:
-        raise HTTPException(status_code=409, detail="Fichier incomplet")
-    update_job(job["id"], status="queued", stage="queued",
-               options=data.model_dump_json())
+    # Prevent two clients finishing the same upload simultaneously.
+    with database() as con:
+        con.execute("BEGIN IMMEDIATE")
+        current = con.execute("SELECT status,expected_size FROM jobs WHERE id=?",
+                              (job["id"],)).fetchone()
+        if current is None or current["status"] != "uploading":
+            raise HTTPException(status_code=409, detail="Fichier déjà validé")
+        source = source_path(job["id"])
+        if not source.is_file() or source.stat().st_size != current["expected_size"]:
+            raise HTTPException(status_code=409, detail="Fichier incomplet")
+        con.execute("UPDATE jobs SET status='queued',stage='queued', options=?,"
+                    "updated_at=? WHERE id=?",
+                    (data.model_dump_json(), datetime.now(timezone.utc).isoformat(),
+                     job["id"]))
     POOL.submit(run_job, job["id"])
     return {"id": job["id"], "status": "queued"}
 
@@ -419,10 +508,10 @@ def create_montage(data: MontageRequest):
         (ROOT / ident).mkdir(mode=0o700, exist_ok=False)
         now = datetime.now(timezone.utc).isoformat()
         con.execute(
-            "INSERT INTO jobs(id,filename,status,expected_size,stage,options,created_at)"
-            " VALUES(?,?,?,?,?,?,?)",
+            "INSERT INTO jobs(id,filename,status,expected_size,stage,options,created_at,updated_at)"
+            " VALUES(?,?,?,?,?,?,?,?)",
             (ident, f"Montage de {len(ids)} vidéos", "queued",
-             total_size, "queued", json.dumps(settings), now))
+             total_size, "queued", json.dumps(settings), now, now))
         con.execute(
             f"UPDATE jobs SET status='consumed',stage='consumed' "
             f"WHERE id IN ({','.join('?' for _ in ids)})", ids)
@@ -434,10 +523,40 @@ def create_montage(data: MontageRequest):
 @app.get("/api/jobs/{ident}", dependencies=[Depends(authorize)])
 def job_status(ident: str):
     data = get_job(ident)
+    expires_at = None
+    if data["status"] in {"done", "failed"}:
+        stamp = datetime.fromisoformat(data["updated_at"] or data["created_at"])
+        expires_at = (stamp + timedelta(days=RESULT_TTL_DAYS)).isoformat()
     return {"id": data["id"], "filename": data["filename"],
             "status": data["status"], "stage": data["stage"],
             "progress": data["progress"], "error": data["error"],
+            "expires_at": expires_at,
             "metadata": json.loads(data["metadata"]) if data["metadata"] else None}
+
+
+@app.post("/api/jobs/{ident}/retry", dependencies=[Depends(authorize)])
+def retry_failed_job(ident: str):
+    """Re-queue an unsuccessful render without requiring a fresh smartphone upload."""
+    job = get_job(ident)
+    with database() as con:
+        con.execute("BEGIN IMMEDIATE")
+        current = con.execute(
+            "SELECT status,options FROM jobs WHERE id=?", (job["id"],)).fetchone()
+        if current is None or current["status"] != "failed" or not current["options"]:
+            raise HTTPException(status_code=409, detail="Montage non relançable")
+        options = json.loads(current["options"])
+        sources = options.get("sources", [job["id"]])
+        for source_id in sources:
+            if not source_path(source_id).is_file():
+                raise HTTPException(
+                    status_code=409,
+                    detail="Rush source manquant : nouvelle importation nécessaire")
+        con.execute(
+            "UPDATE jobs SET status='queued',stage='queued',progress=0,"
+            "error=NULL,metadata=NULL,updated_at=? WHERE id=?",
+            (datetime.now(timezone.utc).isoformat(), job["id"]))
+    POOL.submit(run_job, job["id"])
+    return {"id": job["id"], "status": "queued"}
 
 
 @app.get("/api/jobs/{ident}/filters", dependencies=[Depends(authorize)])
@@ -541,7 +660,7 @@ def download_video(ident: str, request: Request, expires: str | None = None,
     if job["status"] != "done" or not destination.exists():
         raise HTTPException(status_code=404, detail="Montage non disponible")
     return FileResponse(destination, media_type="video/mp4",
-                        filename=f"montage-{ident[:8]}.mp4",
+                        filename=f"montage-{job['id'][:8]}-{preset}.mp4",
                         content_disposition_type="inline" if inline else "attachment",
                         headers={"Cache-Control": "private, no-store",
                                  "Referrer-Policy": "no-referrer"})
