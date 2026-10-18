@@ -191,7 +191,8 @@ def _tempo_fit(track_bpm: float | None, video_bpm: float | None) -> float:
     return round(3.0 * max(0.0, 1.0 - min(distances) / 0.20), 4)
 
 
-def _score(item: dict, energy: str, index: int, vocals: str,\n           video_bpm: float | None = None) -> float:
+def _score(item: dict, energy: str, index: int, vocals: str,
+           video_bpm: float | None = None) -> float:
     # Chart rank and visible artistic clues; BPM/lyrics are NOT fabricated.
     title = item["title"].lower()
     artist = item["artist"].lower()
