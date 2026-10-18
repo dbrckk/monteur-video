@@ -398,13 +398,14 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     if progress:
         progress(0.25, "scenes")
     scenes = detected_scenes if detected_scenes is not None else detect_scenes(source, info["duration"])
+    # Gym repetitions are meaningful even with no soundtrack; clip selection
+    # no longer consults audio silence ranges, so skip the expensive full decode.
     if progress:
-        progress(0.32, "silence")
-    silences = detect_silences(source, info["duration"], info["has_audio"])
+        progress(0.32, "highlights")
     if visual_samples is None:
         from visual_quality import analyze_visual
-        visual_samples = analyze_visual(source)
-    clips = plan_clips(info["duration"], scenes, silences, transcript, target_seconds,
+        visual_samples = analyze_visual(source, duration=info["duration"])
+    clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
                        allow_short=allow_short, visual_samples=visual_samples)
     # Publication text must describe what survived editing, not unseen source footage.
     selected_speech = [phrase for phrase in transcript
