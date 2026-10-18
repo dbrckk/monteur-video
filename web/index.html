@@ -90,7 +90,7 @@
     <button id="testBackend" class="secondary" type="button" style="width:100%;margin-top:10px">Vérifier la connexion du moteur</button>
     <p id="backendStatus" class="muted" role="status" aria-live="polite">Moteur HD gratuit préconfiguré · aucun code ni clé d’accès à saisir.</p>
     <p class="muted"><a href="https://github.com/dbrckk/monteur-video/blob/main/docs/REMOTE_ANDROID.md" target="_blank" rel="noopener noreferrer" style="color:#cafa51">Guide : activer le moteur gratuitement depuis un PC</a></p>
-    <div class="hint" id="mobileHelp">Pendant l’envoi, garde cet onglet ouvert et le téléphone connecté. Si l’envoi est interrompu, reviens ici et sélectionne à nouveau les mêmes vidéos pour reprendre le transfert. Après l’envoi complet, le serveur poursuit le montage même si tu quittes le site.</div>
+    <div class="hint" id="mobileHelp">Pendant l’envoi, garde cet onglet ouvert et le téléphone connecté. Le moteur HD gratuit dispose d’un stockage temporaire : un redémarrage peut faire disparaître le projet. Tant que la page reste ouverte, elle peut renvoyer automatiquement les vidéos sélectionnées. Après une fermeture de la page, il faudra parfois les sélectionner à nouveau.</div>
     <button id="start" class="btn">Créer mon montage →</button>
     <button id="resumeJob" class="secondary" type="button">Retrouver mon dernier montage</button>
     <p class="muted">Traitement côté serveur. La transcription IA nécessite le module Whisper optionnel. Sans celui-ci, le montage utilise les plans et les silences sans inventer de sous-titres.</p>
@@ -269,19 +269,31 @@
   async function upload(file, index, batch, totalSize, precedingBytes) {
     const key = batch.id + ":" + index;
     let session = getUploadSessions()[key];
-    if(!session || session.fingerprint !== fileFingerprint(file)) {
-      session = await request("/api/uploads", {method:"POST",
+    const newSession = async () => {
+      const created = await request("/api/uploads", {method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({filename:file.name,size:file.size})});
-      session.fingerprint = fileFingerprint(file);
-      setUploadSession(key, session);
+      created.fingerprint = fileFingerprint(file);
+      setUploadSession(key, created);
+      return created;
+    };
+    if(!session || session.fingerprint !== fileFingerprint(file))
+      session = await newSession();
+    let current;
+    try {
+      current = await request("/api/uploads/" + session.id);
+    } catch(error) {
+      if(error.status !== 404) throw error;
+      // The temporary upload may have vanished after a Render restart.
+      session = await newSession();
+      current = {offset:0, status:"uploading"};
     }
-    const current = await request("/api/uploads/" + session.id);
     if(current.status === "consumed") return session.id;
     if(current.status !== "uploading")
       throw new Error("Vidéo déjà associée à un autre montage. Recharge la page et recommence.");
     let offset = current.offset;
     let attempts = 0;
+    let resets = 0;
     while(offset < file.size) {
       const chunk = file.slice(offset, Math.min(offset + 8 * 1024 * 1024, file.size));
       try {
@@ -291,10 +303,26 @@
         offset = state.offset;
         attempts = 0;
       } catch(error) {
+        if(error.status === 404 && resets++ < 2) {
+          session = await newSession();
+          offset = 0;
+          attempts = 0;
+          progress(0, "Redémarrage du moteur", "Le serveur a redémarré. Renvoi de la vidéo en cours.");
+          continue;
+        }
         if(++attempts > 6)
           throw new Error("Transfert interrompu. Resélectionne les mêmes vidéos pour reprendre. " + error.message);
         await new Promise(resolve => setTimeout(resolve, Math.min(8000, 500 * 2 ** attempts)));
-        const fresh = await request("/api/uploads/" + session.id);
+        let fresh;
+        try {
+          fresh = await request("/api/uploads/" + session.id);
+        } catch(statusError) {
+          if(statusError.status !== 404 || resets++ >= 2) throw statusError;
+          session = await newSession();
+          offset = 0;
+          attempts = 0;
+          continue;
+        }
         if(fresh.status !== "uploading")
           throw new Error("Le transfert a changé d’état. Retrouve ton montage depuis le bouton dédié.");
         offset = fresh.offset;
@@ -311,6 +339,29 @@
   let activePreset = "original";
   let filterTimer = null;
   let filterList = [];
+  let recoveryAttempts = 0;
+
+  function resetLostProject() {
+    clearTimeout(pollTimer);
+    clearTimeout(filterTimer);
+    localStorage.removeItem("lastJob");
+    localStorage.removeItem("ongoingMontage");
+    localStorage.removeItem("ongoingUploads");
+    activeJob = null;
+    $("resumeJob").style.display = "none";
+    $("retryRender").style.display = "none";
+    $("preview").style.display = "none";
+    $("filterPanel").style.display = "none";
+    $("metadata").style.display = "none";
+    $("retention").textContent = "";
+    progress(0, "Montage interrompu",
+      selectedFiles.length
+        ? "Le moteur HD a redémarré et perdu le projet. Les vidéos sont encore sélectionnées."
+        : "Le moteur HD a redémarré et le projet a disparu. Sélectionne de nouveau tes vidéos pour relancer.");
+    $("message").className = "error";
+    button.disabled = false;
+    button.textContent = "Recréer le montage →";
+  }
 
   function selectPreset(preset) {
     const item = filterList.find(option => option.id === preset);
@@ -490,7 +541,19 @@
       }
       pollTimer = setTimeout(() => poll(id), 2500);
     } catch(error) {
-      if([401, 403, 404].includes(error.status)) {
+      if(error.status === 404) {
+        const canRetry = selectedFiles.length > 0 && recoveryAttempts < 1;
+        resetLostProject();
+        if(canRetry) {
+          recoveryAttempts++;
+          progress(0, "Reprise automatique", "Le serveur a perdu le projet : nouvel envoi des vidéos.");
+          button.disabled = true;
+          try { await createMontage(); }
+          catch(retryError) { showError(retryError); }
+        }
+        return;
+      }
+      if([401, 403].includes(error.status)) {
         showError(error);
         return;
       }
@@ -499,6 +562,31 @@
         "Le navigateur va reconnecter le suivi automatiquement. " + (error.message || ""));
       pollTimer = setTimeout(() => poll(id), Math.min(30000, 2500 * 2 ** Math.min(pollFailures, 4)));
     }
+  }
+  async function createMontage() {
+    await login();
+    const batch = loadBatch(selectedFiles);
+    const totalSize = selectedFiles.reduce((sum,file)=>sum+file.size,0);
+    let precedingBytes = 0;
+    const ids = [];
+    for(let i=0;i<selectedFiles.length;i++) {
+      const file = selectedFiles[i];
+      ids.push(await upload(file, i, batch, totalSize, precedingBytes));
+      precedingBytes += file.size;
+    }
+    progress(.5, "Tous les rushs envoyés", "Lancement du montage commun");
+    const job = await request("/api/montages", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        project_id:batch.id, upload_ids:ids,
+        theme:$("theme").value, aspect:$("aspect").value,
+        seconds:Number($("seconds").value)
+      })});
+    localStorage.setItem("lastJob",JSON.stringify({id:job.id,origin:API_BASE}));
+    $("resumeJob").style.display = "block";
+    localStorage.removeItem("ongoingUploads");
+    localStorage.removeItem("ongoingMontage");
+    await poll(job.id);
   }
   button.addEventListener("click",async()=>{
     $("retryRender").style.display = "none";
@@ -513,31 +601,9 @@
     $("filterPanel").style.display = "none";
     activeJob = null;
     selectedPreset = activePreset = "original";
-    try {
-      await login();
-      const batch = loadBatch(selectedFiles);
-      const totalSize = selectedFiles.reduce((sum,file)=>sum+file.size,0);
-      let precedingBytes = 0;
-      const ids = [];
-      for(let i=0;i<selectedFiles.length;i++) {
-        const file = selectedFiles[i];
-        ids.push(await upload(file, i, batch, totalSize, precedingBytes));
-        precedingBytes += file.size;
-      }
-      progress(.5,"Tous les rushs envoyés","Lancement du montage commun");
-      const job = await request("/api/montages", {method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          project_id:batch.id, upload_ids:ids,
-          theme:$("theme").value, aspect:$("aspect").value,
-          seconds:Number($("seconds").value)
-        })});
-      localStorage.setItem("lastJob",JSON.stringify({id:job.id,origin:API_BASE}));
-      $("resumeJob").style.display = "block";
-      localStorage.removeItem("ongoingUploads");
-      localStorage.removeItem("ongoingMontage");
-      await poll(job.id);
-    }catch(error){showError(error);}
+    recoveryAttempts = 0;
+    try { await createMontage(); }
+    catch(error) { showError(error); }
   });
   $("retryRender").addEventListener("click",async()=>{
     if(!activeJob) return;
@@ -595,7 +661,7 @@
     try { saved = JSON.parse(localStorage.getItem("lastJob") || "null"); }
     catch { saved = {id:localStorage.getItem("lastJob"),origin:""}; }
     if(!saved?.id || saved.origin !== API_BASE) return showError(new Error("Montage introuvable sur ce moteur."));
-    if(API_BASE && !$("token").value) return showError(new Error("Renseigne ta clé d’accès pour reprendre le suivi."));
+    if(API_BASE && !API_BASE.includes("monteur-video-hd.onrender.com") && !$("token").value) return showError(new Error("Renseigne ta clé d’accès pour reprendre le suivi."));
     poll(saved.id);
   });
   if("serviceWorker" in navigator && location.protocol === "https:") {
