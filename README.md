@@ -44,6 +44,18 @@ La V2 analyse les signaux vidéo FFmpeg déjà calculés (intensité des mouveme
 
 Cette fonction s'inspire du **principe d'appariement entre musique et vidéo**, mais ne reproduit ni le catalogue TikTok, ni son moteur de recommandation propriétaire, ni des morceaux d'artistes non licenciés. La détection reste fondée sur des heuristiques visuelles, sans classification sémantique des exercices ni analyse des goûts personnels. Si les images sont trop sombres ou les signaux insuffisants, le thème fournit un choix musical de secours.
 
+## Musiques populaires des Reels, sélectionnées selon la vidéo
+
+**Mode Reels Instagram (par défaut dans le studio mobile).** À partir de la sélection des meilleurs plans et des mesures de mouvement, le moteur attribue une énergie visuelle au montage. Il parcourt alors les classements thématiques **SoundMatcha** basés sur les pages audio publiques de Reels Instagram (musculation, sport/énergie, motivation, lifestyle), classe les titres et retient le meilleur candidat avec deux alternatives. Le résultat indique le nom du morceau, l'artiste et un lien direct vers la page audio Instagram lorsqu'elle est identifiable. Si le classement public est indisponible, un jeu de liens déjà vérifiés est utilisé et cette origine de secours est signalée.
+
+**Pour publier avec un morceau commercial :** le moteur produit un MP4 HD où le son des rushs est coupé (ou conservé à 20 % si demandé). Après le rendu, ouvrir la piste recommandée dans Instagram, utiliser le son depuis sa page, choisir le MP4 exporté dans la galerie et publier. **La piste commerciale n'est jamais téléchargée depuis un Reel, réencodée ou incluse dans l'export MP4 par notre serveur.** Instagram applique ses propres accords selon le compte, le pays et l'usage lors de l'ajout dans son application. Une musique existant sur Instagram n'est pas nécessairement autorisée pour une publicité, un compte professionnel ou une redistribution sur YouTube.
+
+Le logiciel ne dispose pas d'une API publique garantie pour indexer toutes les vidéos similaires d'Instagram ou pour ajouter automatiquement une musique populaire à un fichier MP4 tiers. Il s'agit donc d'une correspondance basée sur **un catalogue public de musiques réellement employées dans le même genre de Reels**, et sur l'énergie des images, non d'un clone exact de l'algorithme propriétaire de Meta ni d'une authentification à Instagram. Les titres instrumentaux ne sont certifiés que lorsque leur intitulé l'indique ; sinon la présence de paroles est notée inconnue. Aucun BPM d'un morceau tiers n'est inventé, et la synchronisation stricte sur ses battements reste une étape manuelle dans l'éditeur Instagram.
+
+Le mode **Musique originale intégrée au MP4** demeure disponible et produit une composition instrumentale embarquée directement dans le MP4 pour une publication multi-plateforme sans musique commerciale externe.
+
+Source : https://soundmatcha.com/for/gym/ — classement public à citer par lien. Conditions musicales de Meta : https://www.facebook.com/help/instagram/402084904469945 . Contrat CapCut : https://www.capcut.com/clause/material-license-agreement .
+
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.
