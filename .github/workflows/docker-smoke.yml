@@ -54,3 +54,16 @@ jobs:
       - name: Remove smoke container
         if: always()
         run: docker rm -f monteur-v1-smoke || true
+
+  ai-runtime:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image with real faster-whisper installed
+        run: docker build --build-arg INSTALL_WHISPER=1 -t monteur-v1:ai .
+      - name: Verify CPU ASR model can actually initialize
+        run: |
+          docker run --rm --entrypoint python monteur-v1:ai \
+            -c "from faster_whisper import WhisperModel; m=WhisperModel('tiny', device='cpu', compute_type='int8'); print('CPU ASR OK')"
