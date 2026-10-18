@@ -293,6 +293,7 @@
       throw new Error("Vidéo déjà associée à un autre montage. Recharge la page et recommence.");
     let offset = current.offset;
     let attempts = 0;
+    let resets = 0;
     while(offset < file.size) {
       const chunk = file.slice(offset, Math.min(offset + 8 * 1024 * 1024, file.size));
       try {
@@ -302,10 +303,26 @@
         offset = state.offset;
         attempts = 0;
       } catch(error) {
+        if(error.status === 404 && resets++ < 2) {
+          session = await newSession();
+          offset = 0;
+          attempts = 0;
+          progress(0, "Redémarrage du moteur", "Le serveur a redémarré. Renvoi de la vidéo en cours.");
+          continue;
+        }
         if(++attempts > 6)
           throw new Error("Transfert interrompu. Resélectionne les mêmes vidéos pour reprendre. " + error.message);
         await new Promise(resolve => setTimeout(resolve, Math.min(8000, 500 * 2 ** attempts)));
-        const fresh = await request("/api/uploads/" + session.id);
+        let fresh;
+        try {
+          fresh = await request("/api/uploads/" + session.id);
+        } catch(statusError) {
+          if(statusError.status !== 404 || resets++ >= 2) throw statusError;
+          session = await newSession();
+          offset = 0;
+          attempts = 0;
+          continue;
+        }
         if(fresh.status !== "uploading")
           throw new Error("Le transfert a changé d’état. Retrouve ton montage depuis le bouton dédié.");
         offset = fresh.offset;
