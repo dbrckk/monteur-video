@@ -39,6 +39,15 @@ class MobileApiTests(unittest.TestCase):
                 self.assertEqual(approved.headers["access-control-allow-origin"],
                                  "https://dbrckk.github.io")
 
+                shipstatic = client.options(path, headers={
+                    "Origin": "https://angled-gate-srzt937.shipstatic.com",
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": "authorization,content-type",
+                })
+                self.assertEqual(shipstatic.status_code, 200)
+                self.assertEqual(shipstatic.headers["access-control-allow-origin"],
+                                 "https://angled-gate-srzt937.shipstatic.com")
+
                 token = {"Authorization": "Bearer strong-example-token-123"}
                 response = client.post(path, json=payload, headers=token)
                 self.assertEqual(response.status_code, 201)
