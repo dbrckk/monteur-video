@@ -38,6 +38,8 @@ class StaticMobileTests(unittest.TestCase):
         self.assertIn('[hidden]{display:none!important}', source)
         self.assertIn('monteur-video-beta.onrender.com', source)
         self.assertIn('monteur-video-hd.onrender.com', source)
+        self.assertIn('LOCAL_HOST ? "" : DEFAULT_BACKEND', source)
+        self.assertIn('127.0.0.1', source)
         self.assertIn('localStorage.removeItem("backendUrl")', source)
         self.assertIn('id="tokenLabel" hidden', source)
         self.assertIn('id="retryRender"', source)
