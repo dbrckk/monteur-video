@@ -82,11 +82,25 @@ def usable_ranges(samples: list[VisualSample], duration: float) -> list[tuple[fl
     if not samples:
         return []
     intervals: list[tuple[float, float]] = []
+    visible_frames = [(25 <= s.luminance <= 230 and
+                       (s.detail >= 2 or s.motion >= 0.35)) for s in samples]
+    # Motion essentially zero for >=3s is usually a frozen frame or dead time.
+    # Do not discard individual static gym frames between moving repetitions.
+    i = 0
+    while i < len(samples):
+        if samples[i].motion > 0.25:
+            i += 1
+            continue
+        j = i + 1
+        while j < len(samples) and samples[j].motion <= 0.25:
+            j += 1
+        if j - i >= 6:
+            for k in range(i, j):
+                visible_frames[k] = False
+        i = j
     start: float | None = None
     last = 0.0
-    for sample in samples:
-        visible = (25 <= sample.luminance <= 230 and
-                   (sample.detail >= 2 or sample.motion >= 0.35))
+    for sample, visible in zip(samples, visible_frames):
         if visible:
             if start is None:
                 start = sample.time
