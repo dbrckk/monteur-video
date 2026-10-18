@@ -50,6 +50,9 @@
     .hint{border-left:3px solid #cafa51;padding:11px 13px;background:#1b2930;border-radius:7px;margin:14px 0;color:#d3e3e7;font-size:13px;line-height:1.55}
     .secondary{border:1px solid #516451;color:#cafa51;background:transparent;border-radius:11px;padding:13px 16px;min-height:48px;cursor:pointer;font-weight:700}
     #resumeJob{display:none;margin-top:10px;width:100%}
+    .rush-list{list-style:none;counter-reset:rush;padding:0;margin:12px 0 0;display:grid;gap:9px}.rush-list li{display:flex;gap:12px;align-items:center;padding:11px 12px;border:1px solid #34474e;border-radius:11px;background:#111e28;font-size:13px}.rush-no{display:grid;place-items:center;width:29px;height:29px;flex:none;border-radius:8px;background:#cafa51;color:#102112;font-weight:900}.rush-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rush-size{color:#a7b4bf;white-space:nowrap}
+    .rush-actions{display:flex;gap:5px;flex:none}.rush-actions button{min-width:32px;min-height:35px;padding:4px;border-radius:7px;border:1px solid #405252;background:#1b2b33;color:#d9f0df;cursor:pointer}.rush-actions button:disabled{opacity:.25;cursor:default}
+    .filter-panel{display:none;margin-top:24px;border-top:1px solid #2d4247;padding-top:24px}.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;margin:17px 0}.filter-choice{display:flex;flex-direction:column;align-items:stretch;text-align:left;gap:6px;padding:9px;background:#0d1823;color:#e2edf2;border:1px solid #34424a;border-radius:12px;cursor:pointer;min-height:136px;transition:border-color .2s}.filter-choice[aria-pressed="true"]{border-color:#cafa51;box-shadow:0 0 0 1px #cafa51}.filter-choice strong{font-size:13px}.filter-choice small{font-size:11px;color:#a8bac3;line-height:1.4}.filter-swatch{height:57px;border-radius:7px;background:linear-gradient(140deg,#e9ad69 0%,#687b8e 42%,#17293c 100%)}.filter-apply{width:100%}.filter-apply:disabled{opacity:.45;cursor:not-allowed}
     @media(max-width:780px){header{margin-bottom:45px}.grid{grid-template-columns:1fr}.wrap{padding:20px 16px 50px}h1{letter-spacing:-1.7px}.card{padding:20px}.pill{font-size:11px}.drop{min-height:150px;padding:18px}.wrap{padding-bottom:calc(46px + env(safe-area-inset-bottom))}button,.download,select,input{min-height:48px} .preview video{width:100%;max-height:72dvh}.download{display:block;text-align:center;width:100%}.row{flex-direction:column;gap:0}}
   </style>
 </head>
@@ -58,17 +61,18 @@
 <header><span class="brand">MONTEUR<b> STUDIO</b></span><span class="pill">WEB · ANDROID · BÊTA</span></header>
 <section>
   <h1>De tes rushs à des vidéos <em>qui marquent.</em></h1>
-  <p class="lead">Depuis la galerie de ton téléphone : un fichier, un thème, un format. Le moteur analyse tes images et ta voix, choisit des séquences, monte, sous-titre et prépare la publication. Les vidéos longues sont envoyées par morceaux.</p>
+  <p class="lead">Depuis la galerie de ton téléphone : une ou plusieurs vidéos, un thème, un format. Le moteur analyse tes images et ta voix, choisit des séquences, monte, sous-titre et prépare la publication. Les vidéos longues sont envoyées par morceaux.</p>
 </section>
 <div class="grid">
   <section class="card">
     <h2>01 / Créer un montage</h2>
     <label class="drop" id="drop" for="video">
       <span class="icon">↑</span>
-      <strong id="fileName">Choisir une vidéo depuis mon téléphone</strong>
-      <small>Galerie Android ou fichiers · MP4, MOV, MKV, WebM, AVI</small>
+      <strong id="fileName">Choisir une ou plusieurs vidéos</strong>
+      <small>Jusqu’à 10 vidéos en un seul montage · Galerie Android ou fichiers</small>
     </label>
-    <input id="video" type="file" accept=".mp4,.mov,.mkv,.webm,.avi,.m4v,video/*">
+    <input id="video" type="file" multiple accept=".mp4,.mov,.mkv,.webm,.avi,.m4v,video/*">
+    <ol id="selectedList" class="rush-list" aria-label="Vidéos sélectionnées"></ol>
     <div class="row">
       <div><label class="setting" for="aspect">Format de sortie</label>
         <select id="aspect"><option value="vertical">Reels / Shorts · 9:16</option><option value="youtube">YouTube · 16:9</option></select>
@@ -81,7 +85,7 @@
     <select id="seconds"><option value="30">30 s · Impact rapide</option><option value="45" selected>45 s · Reel conseillé</option><option value="60">60 s · Narration</option><option value="90">90 s · Plus détaillé</option><option value="180">180 s · Long extrait</option></select>
     <label class="setting" for="backend">Adresse HTTPS du moteur de montage</label><input id="backend" type="url" placeholder="https://api.example.com"><button type="button" class="copy" id="saveBackend" style="margin-top:10px">Enregistrer le moteur</button><label class="setting" for="token">Clé d'accès (uniquement si serveur protégé)</label>
     <input id="token" type="password" autocomplete="off" placeholder="Facultatif en local">
-    <div class="hint" id="mobileHelp">Pendant l’envoi, garde cet onglet ouvert et le téléphone connecté. Si l’envoi est interrompu, reviens ici et sélectionne à nouveau le même fichier pour reprendre le transfert. Après l’envoi complet, le serveur poursuit le montage même si tu quittes le site.</div>
+    <div class="hint" id="mobileHelp">Pendant l’envoi, garde cet onglet ouvert et le téléphone connecté. Si l’envoi est interrompu, reviens ici et sélectionne à nouveau les mêmes vidéos pour reprendre le transfert. Après l’envoi complet, le serveur poursuit le montage même si tu quittes le site.</div>
     <button id="start" class="btn">Créer mon montage →</button>
     <button id="resumeJob" class="secondary" type="button">Retrouver mon dernier montage</button>
     <p class="muted">Traitement côté serveur. La transcription IA nécessite le module Whisper optionnel. Sans celui-ci, le montage utilise les plans et les silences sans inventer de sous-titres.</p>
@@ -89,9 +93,9 @@
   <aside class="card">
     <h2>Le processus</h2>
     <div class="step"><span class="n">1</span><div><strong>Analyse des rushs</strong><p>Lecture de la vidéo, repérage des changements de plans et des passages parlés.</p></div></div>
-    <div class="step"><span class="n">2</span><div><strong>Construction du rythme</strong><p>Sélection des séquences, suppression de passages silencieux et cadrage 9:16 ou 16:9.</p></div></div>
+    <div class="step"><span class="n">2</span><div><strong>Fusion des meilleurs moments</strong><p>Chaque vidéo contribue au montage final, dans l’ordre de sélection, avec rythme et format 9:16 ou 16:9.</p></div></div>
     <div class="step"><span class="n">3</span><div><strong>Finition audiovisuelle</strong><p>Encodage H.264, audio AAC, sous-titres si une transcription existe.</p></div></div>
-    <div class="step"><span class="n">4</span><div><strong>Prêt à publier</strong><p>Vidéo MP4, description Instagram et hashtags thématiques enrichis par le discours détecté.</p></div></div>
+    <div class="step"><span class="n">4</span><div><strong>Filtres et publication</strong><p>Après le rendu, sélection d’un look conseillé pour le thème, export MP4 final, description et hashtags.</p></div></div>
     <p class="muted">Les choix artistiques avancés, le suivi automatique du sujet et l'étalonnage cinématographique restent des évolutions à valider.</p>
   </aside>
 </div>
@@ -103,9 +107,17 @@
   <div class="preview" id="preview">
     <video id="resultVideo" controls playsinline preload="metadata"></video>
     <a class="download" id="download" href="#" download>Télécharger le MP4 sur mon téléphone ↓</a>
+    <button class="secondary" id="deleteJob" type="button" style="width:100%;margin-top:12px">Supprimer mes vidéos du serveur</button>
   </div>
+  <section class="filter-panel" id="filterPanel" aria-label="Filtres de finition">
+    <h2>03 / Personnaliser le rendu</h2>
+    <p class="muted" id="filterIntro">Filtres recommandés pour le thème choisi. Sélectionne un look, vérifie l’aperçu puis applique-le à la vidéo finale.</p>
+    <div id="filterOptions" class="filter-grid" role="group" aria-label="Choix du filtre"></div>
+    <p id="filterStatus" class="muted" role="status" aria-live="polite"></p>
+    <button id="applyFilter" type="button" class="secondary filter-apply">Appliquer le filtre au MP4</button>
+  </section>
   <div class="metadata" id="metadata">
-    <div class="labelrow"><h2>03 / Description et hashtags</h2><button id="copy" class="copy">Copier</button></div>
+    <div class="labelrow"><h2>04 / Description et hashtags</h2><button id="copy" class="copy">Copier</button></div>
     <textarea id="description" readonly></textarea>
     <p id="quality" class="muted"></p>
   </div>
@@ -150,59 +162,272 @@
     return response.json();
   }
   async function login() {
+    if(API_BASE) {
+      if(!$("token").value) throw new Error("Renseigne la clé d’accès du moteur HTTPS.");
+      return;
+    }
     return request("/api/login", {method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({token:$("token").value})});
   }
-  function selectFile(file) {
-    if(!file) return;
-    if(file.size <= 0) return showError(new Error("Le fichier est vide."));
-    input._selectedFile = file;
-    const amount = file.size >= 1024**3
-      ? (file.size / 1024**3).toFixed(2) + " Go"
-      : (file.size / 1024**2).toFixed(1) + " Mo";
-    $("fileName").textContent = file.name + " · " + amount;
-  }
-  input.addEventListener("change", e => selectFile(e.target.files[0]));
-  ["dragenter","dragover"].forEach(name => drop.addEventListener(name,e => {e.preventDefault();drop.classList.add("drag");}));
-  ["dragleave","drop"].forEach(name => drop.addEventListener(name,e => {e.preventDefault();drop.classList.remove("drag");}));
-  drop.addEventListener("drop",e=> selectFile(e.dataTransfer.files[0]));
-  async function upload(file) {
-    let session;
-    try { session = JSON.parse(localStorage.getItem("ongoingUpload") || "null"); } catch {}
-    const fingerprint = [API_BASE, file.name, file.size, file.lastModified].join("|");
-    if(!session || session.fingerprint !== fingerprint) {
-      session = await request("/api/uploads", {method:"POST",
-        headers:{"Content-Type":"application/json"},body:JSON.stringify({filename:file.name,size:file.size})});
-      session.fingerprint = fingerprint;
-      localStorage.setItem("ongoingUpload",JSON.stringify(session));
-    }
-    let current = await request("/api/uploads/" + session.id);
-    if(current.status !== "uploading") {
-      if(["queued","processing","done","failed"].includes(current.status)) {
-        return {id:session.id,alreadyStarted:true};
+  const MAX_FILES = 10;
+  let selectedFiles = [];
+  const fileFingerprint = file => [file.name, file.size, file.lastModified].join(":");
+  const readableSize = bytes => bytes >= 1024**3
+    ? (bytes / 1024**3).toFixed(2) + " Go"
+    : (bytes / 1024**2).toFixed(1) + " Mo";
+
+  function selectFiles(items) {
+    const files = Array.from(items || []);
+    if(!files.length || button.disabled) return;
+    if(files.length > MAX_FILES) return showError(new Error("Maximum " + MAX_FILES + " vidéos par montage."));
+    if(files.some(file => file.size <= 0)) return showError(new Error("Un fichier sélectionné est vide."));
+    if(new Set(files.map(fileFingerprint)).size !== files.length)
+      return showError(new Error("Une même vidéo a été choisie plusieurs fois."));
+    selectedFiles = files;
+    $("fileName").textContent = files.length + " vidéo" + (files.length > 1 ? "s" : "")
+      + " · " + readableSize(files.reduce((sum,file)=>sum+file.size, 0));
+    $("selectedList").replaceChildren();
+    files.forEach((file, index) => {
+      const li = document.createElement("li");
+      const number = document.createElement("span");
+      number.className = "rush-no";
+      number.textContent = String(index + 1);
+      const name = document.createElement("span");
+      name.className = "rush-name";
+      name.textContent = file.name;
+      const size = document.createElement("span");
+      size.className = "rush-size";
+      size.textContent = readableSize(file.size);
+      const actions = document.createElement("span");
+      actions.className = "rush-actions";
+      for(const [symbol, delta, description] of [["↑", -1, "Monter"], ["↓", 1, "Descendre"]]) {
+        const move = document.createElement("button");
+        move.type = "button";
+        move.textContent = symbol;
+        move.disabled = index + delta < 0 || index + delta >= files.length;
+        move.setAttribute("aria-label", description + " " + file.name);
+        move.addEventListener("click", () => {
+          if(button.disabled) return;
+          const next = [...selectedFiles];
+          [next[index], next[index + delta]] = [next[index + delta], next[index]];
+          selectFiles(next);
+        });
+        actions.append(move);
       }
-      throw new Error("État de transfert inconnu : " + current.status);
+      li.append(number, name, size, actions);
+      $("selectedList").append(li);
+    });
+    $("message").className = "muted";
+  }
+  input.addEventListener("change", e => selectFiles(e.target.files));
+  ["dragenter","dragover"].forEach(name => drop.addEventListener(name,e => {
+    e.preventDefault(); drop.classList.add("drag");
+  }));
+  ["dragleave","drop"].forEach(name => drop.addEventListener(name,e => {
+    e.preventDefault(); drop.classList.remove("drag");
+  }));
+  drop.addEventListener("drop",e => selectFiles(e.dataTransfer.files));
+
+  function loadBatch(files) {
+    const fingerprints = files.map(fileFingerprint);
+    let existing;
+    try { existing = JSON.parse(localStorage.getItem("ongoingMontage") || "null"); } catch {}
+    if(existing && existing.origin === API_BASE &&
+      JSON.stringify(existing.fingerprints) === JSON.stringify(fingerprints)) return existing;
+    const next = {id:crypto.randomUUID(), origin:API_BASE, fingerprints};
+    localStorage.setItem("ongoingMontage", JSON.stringify(next));
+    localStorage.removeItem("ongoingUploads");
+    return next;
+  }
+  function getUploadSessions() {
+    try { return JSON.parse(localStorage.getItem("ongoingUploads") || "{}") || {}; }
+    catch { return {}; }
+  }
+  function setUploadSession(key, session) {
+    const sessions = getUploadSessions();
+    sessions[key] = session;
+    localStorage.setItem("ongoingUploads", JSON.stringify(sessions));
+  }
+  async function upload(file, index, batch, totalSize, precedingBytes) {
+    const key = batch.id + ":" + index;
+    let session = getUploadSessions()[key];
+    if(!session || session.fingerprint !== fileFingerprint(file)) {
+      session = await request("/api/uploads", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({filename:file.name,size:file.size})});
+      session.fingerprint = fileFingerprint(file);
+      setUploadSession(key, session);
     }
-    let offset = current.offset, attempts = 0;
+    const current = await request("/api/uploads/" + session.id);
+    if(current.status === "consumed") return session.id;
+    if(current.status !== "uploading")
+      throw new Error("Vidéo déjà associée à un autre montage. Recharge la page et recommence.");
+    let offset = current.offset;
+    let attempts = 0;
     while(offset < file.size) {
       const chunk = file.slice(offset, Math.min(offset + 8 * 1024 * 1024, file.size));
       try {
         const state = await request("/api/uploads/" + session.id, {method:"PATCH",
-          headers:{"Upload-Offset":String(offset),"Content-Type":"application/octet-stream"},body:chunk});
+          headers:{"Upload-Offset":String(offset),"Content-Type":"application/octet-stream"},
+          body:chunk});
         offset = state.offset;
         attempts = 0;
       } catch(error) {
-        if(++attempts > 6) throw new Error("Envoi interrompu : reviens sur ce site et resélectionne la même vidéo pour reprendre. " + error.message);
+        if(++attempts > 6)
+          throw new Error("Transfert interrompu. Resélectionne les mêmes vidéos pour reprendre. " + error.message);
         await new Promise(resolve => setTimeout(resolve, Math.min(8000, 500 * 2 ** attempts)));
-        current = await request("/api/uploads/" + session.id);
-        offset = current.offset;
+        const fresh = await request("/api/uploads/" + session.id);
+        if(fresh.status !== "uploading")
+          throw new Error("Le transfert a changé d’état. Retrouve ton montage depuis le bouton dédié.");
+        offset = fresh.offset;
       }
-      progress(offset / file.size * .5, "Transfert des rushs", (offset/1024**3).toFixed(2) + " / " + (file.size/1024**3).toFixed(2) + " Go");
+      const amount = precedingBytes + offset;
+      progress(amount / totalSize * .5, "Envoi des vidéos",
+        "Vidéo " + (index + 1) + "/" + selectedFiles.length + " : "
+        + readableSize(amount) + " / " + readableSize(totalSize));
     }
-    // Keep the session until /complete succeeds: closing Chrome at the
-    // end of an upload must not strand an unstarted job.
-    return {id:session.id,alreadyStarted:false};
+    return session.id;
   }
+  let activeJob = null;
+  let selectedPreset = "original";
+  let activePreset = "original";
+  let filterTimer = null;
+  let filterList = [];
+
+  function selectPreset(preset) {
+    const item = filterList.find(option => option.id === preset);
+    if(!item) return;
+    selectedPreset = preset;
+    for(const node of $("filterOptions").children)
+      node.setAttribute("aria-pressed", String(node.dataset.preset === preset));
+    const simulated = selectedPreset !== activePreset;
+    $("resultVideo").style.filter = simulated ? item.css : "none";
+    $("applyFilter").disabled = false;
+    $("applyFilter").textContent = preset === activePreset
+      ? "Filtre déjà appliqué"
+      : (preset === "original" || item.status === "done"
+        ? "Utiliser cette version" : "Appliquer le filtre au MP4");
+    $("applyFilter").disabled = preset === activePreset;
+    $("filterStatus").textContent = simulated
+      ? "L’aperçu affiche une simulation. Le MP4 téléchargé reste inchangé tant que le filtre n’est pas appliqué."
+      : "La vidéo et le téléchargement correspondent au filtre affiché.";
+  }
+  async function loadFilters(id) {
+    const data = await request("/api/jobs/" + encodeURIComponent(id) + "/filters");
+    filterList = data.filters || [];
+    $("filterPanel").style.display = "block";
+    $("filterOptions").replaceChildren();
+    for(const item of filterList) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "filter-choice";
+      button.dataset.preset = item.id;
+      button.setAttribute("aria-pressed", "false");
+      const sample = document.createElement("span");
+      sample.className = "filter-swatch";
+      sample.style.filter = item.css;
+      const title = document.createElement("strong");
+      title.textContent = item.label + (item.recommended ? " · Conseillé" : "");
+      const description = document.createElement("small");
+      description.textContent = item.description;
+      button.append(sample, title, description);
+      button.addEventListener("click", () => selectPreset(item.id));
+      $("filterOptions").append(button);
+    }
+    selectPreset(activePreset);
+  }
+  async function useExport(id, preset) {
+    const suffix = preset === "original" ? "" : "?preset=" + encodeURIComponent(preset);
+    const link = await request("/api/jobs/" + encodeURIComponent(id) + "/download-link" + suffix);
+    const url = apiPath(link.url);
+    activePreset = preset;
+    $("download").href = url;
+    $("download").dataset.expires = String(Date.now() + (link.expires_in - 30) * 1000);
+    $("resultVideo").src = url + "&inline=1";
+    $("resultVideo").style.filter = "none";
+    selectPreset(preset);
+  }
+  async function waitForFilter(id, preset) {
+    clearTimeout(filterTimer);
+    try {
+      const data = await request("/api/jobs/" + encodeURIComponent(id) + "/filters");
+      const item = data.filters.find(entry => entry.id === preset);
+      if(!item) throw new Error("Filtre non disponible.");
+      filterList = data.filters;
+      if(item.status === "done") {
+        await useExport(id, preset);
+        $("filterStatus").textContent = "Filtre " + item.label + " appliqué. MP4 prêt à télécharger.";
+        await loadFilters(id);
+        return;
+      }
+      if(item.status === "failed") throw new Error(item.error || "Échec du filtre");
+      $("filterStatus").textContent = "Export du filtre " + item.label + " en cours…";
+      filterTimer = setTimeout(() => waitForFilter(id, preset), 2500);
+    } catch(error) {
+      $("applyFilter").disabled = false;
+      $("filterStatus").textContent = "Filtre non appliqué : " + error.message + ". L’original est conservé.";
+    }
+  }
+  $("applyFilter").addEventListener("click", async () => {
+    if(!activeJob || selectedPreset === activePreset) return;
+    const preset = selectedPreset;
+    $("applyFilter").disabled = true;
+    try {
+      if(preset === "original" || filterList.find(item=>item.id===preset)?.status === "done") {
+        await useExport(activeJob, preset);
+        return;
+      }
+      $("filterStatus").textContent = "Préparation de la version " + preset + "…";
+      await request("/api/jobs/" + encodeURIComponent(activeJob) + "/filters", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({preset})
+      });
+      await waitForFilter(activeJob, preset);
+    } catch(error) {
+      $("applyFilter").disabled = false;
+      $("filterStatus").textContent = "Erreur du filtre : " + error.message;
+    }
+  });
+  $("deleteJob").addEventListener("click", async () => {
+    if(!activeJob) return;
+    if(!confirm("Supprimer définitivement le montage, les vidéos sources et tous les filtres du serveur ?")) return;
+    try {
+      await request("/api/jobs/" + encodeURIComponent(activeJob), {method:"DELETE"});
+      clearTimeout(pollTimer);
+      clearTimeout(filterTimer);
+      localStorage.removeItem("lastJob");
+      $("resumeJob").style.display = "none";
+      $("preview").style.display = "none";
+      $("filterPanel").style.display = "none";
+      $("metadata").style.display = "none";
+      $("resultVideo").removeAttribute("src");
+      $("resultVideo").load();
+      activeJob = null;
+      progress(0, "Fichiers supprimés", "Les sources, le montage et les versions filtrées ont été retirés du serveur.");
+    } catch(error) {
+      $("filterStatus").textContent = "Suppression impossible : " + error.message;
+    }
+  });
+  $("download").addEventListener("click", async event => {
+    if(!activeJob || !Number($("download").dataset.expires) ||
+       Date.now() < Number($("download").dataset.expires)) return;
+    event.preventDefault();
+    try {
+      const suffix = activePreset === "original" ? "" : "?preset=" + encodeURIComponent(activePreset);
+      const link = await request("/api/jobs/" + encodeURIComponent(activeJob) + "/download-link" + suffix);
+      const a = document.createElement("a");
+      a.href = apiPath(link.url);
+      a.download = "montage-" + activePreset + ".mp4";
+      document.body.append(a);
+      a.click();
+      a.remove();
+      $("download").href = a.href;
+      $("download").dataset.expires = String(Date.now() + (link.expires_in - 30) * 1000);
+    } catch(error) {
+      $("filterStatus").textContent = "Téléchargement indisponible : " + error.message;
+    }
+  });
+
   async function poll(id) {
     clearTimeout(pollTimer);
     try {
@@ -211,15 +436,14 @@
       progress(p, stages[job.stage] || job.stage, job.status === "processing" ? "Traitement en cours sur le serveur…" : "");
       if(job.status === "failed") throw new Error(job.error || "Erreur de rendu");
       if(job.status === "done") {
+        activeJob = id;
         button.disabled = false;
         button.textContent = "Créer un autre montage →";
         // Keep last finished job for returning mobile users (download later).
         $("resumeJob").style.display = "block";
-        const link = await request("/api/jobs/" + encodeURIComponent(id) + "/download-link");
-        const url = apiPath(link.url);
         $("preview").style.display = "block";
-        $("download").href = url;
-        $("resultVideo").src = url + "&inline=1";
+        await useExport(id, "original");
+        await loadFilters(id);
         const meta = job.metadata || {};
         $("metadata").style.display = "block";
         $("description").value = meta.description || "";
@@ -232,26 +456,40 @@
     } catch(error) { showError(error); }
   }
   button.addEventListener("click",async()=>{
-    const file = input._selectedFile || input.files[0];
-    if(!file) return showError(new Error("Sélectionne une vidéo."));
+    if(!selectedFiles.length) return showError(new Error("Sélectionne au moins une vidéo."));
     button.disabled = true;
     $("message").className = "muted";
     clearTimeout(pollTimer);
-    $("preview").style.display = "none";$("metadata").style.display = "none";
+    clearTimeout(filterTimer);
+    $("preview").style.display = "none";
+    $("metadata").style.display = "none";
+    $("filterPanel").style.display = "none";
+    activeJob = null;
+    selectedPreset = activePreset = "original";
     try {
       await login();
-      progress(0,"Initialisation du transfert");
-      const transfer = await upload(file);
-      const id = transfer.id;
-      localStorage.setItem("lastJob",JSON.stringify({id,origin:API_BASE}));
-      $("resumeJob").style.display="block";
-      if(!transfer.alreadyStarted) {
-        await request("/api/uploads/" + id + "/complete",{method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({theme:$("theme").value,aspect:$("aspect").value,seconds:Number($("seconds").value)})});
+      const batch = loadBatch(selectedFiles);
+      const totalSize = selectedFiles.reduce((sum,file)=>sum+file.size,0);
+      let precedingBytes = 0;
+      const ids = [];
+      for(let i=0;i<selectedFiles.length;i++) {
+        const file = selectedFiles[i];
+        ids.push(await upload(file, i, batch, totalSize, precedingBytes));
+        precedingBytes += file.size;
       }
-      localStorage.removeItem("ongoingUpload");
-      await poll(id);
+      progress(.5,"Tous les rushs envoyés","Lancement du montage commun");
+      const job = await request("/api/montages", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          project_id:batch.id, upload_ids:ids,
+          theme:$("theme").value, aspect:$("aspect").value,
+          seconds:Number($("seconds").value)
+        })});
+      localStorage.setItem("lastJob",JSON.stringify({id:job.id,origin:API_BASE}));
+      $("resumeJob").style.display = "block";
+      localStorage.removeItem("ongoingUploads");
+      localStorage.removeItem("ongoingMontage");
+      await poll(job.id);
     }catch(error){showError(error);}
   });
   $("copy").addEventListener("click",async()=>{

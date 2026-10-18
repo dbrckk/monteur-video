@@ -48,6 +48,15 @@ class MobileApiTests(unittest.TestCase):
                 self.assertEqual(shipstatic.headers["access-control-allow-origin"],
                                  "https://angled-gate-srzt937.shipstatic.com")
 
+                v2 = client.options(path, headers={
+                    "Origin": "https://snappy-gate-x58qpre.shipstatic.com",
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": "authorization,content-type",
+                })
+                self.assertEqual(v2.status_code, 200)
+                self.assertEqual(v2.headers["access-control-allow-origin"],
+                                 "https://snappy-gate-x58qpre.shipstatic.com")
+
                 token = {"Authorization": "Bearer strong-example-token-123"}
                 response = client.post(path, json=payload, headers=token)
                 self.assertEqual(response.status_code, 201)

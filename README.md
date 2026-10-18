@@ -1,12 +1,12 @@
 # Monteur Studio — montage automatique fitness / motivation
 
-Application web **locale** construite pour produire de vrais montages à partir de longues vidéos, et non de démonstrations synthétiques. Importation reprenable par blocs de 8 Mio, analyse FFmpeg des scènes et silences, transcription facultative via faster-whisper, assemblage des clips, incrustation de sous-titres, export **9:16 (Instagram/Reels/Shorts)** ou **16:9 (YouTube)** en H.264/AAC, description française et hashtags.
+Application web **locale** construite pour produire de vrais montages à partir de longues vidéos, et non de démonstrations synthétiques. Importation de **1 à 10 vidéos pour un seul montage**, reprenable par blocs de 8 Mio, analyse FFmpeg des scènes et silences, transcription facultative via faster-whisper, assemblage des clips issus de chaque rush, incrustation de sous-titres, filtres colorimétriques sélectionnables **après le premier rendu**, export **9:16 (Instagram/Reels/Shorts)** ou **16:9 (YouTube)** en H.264/AAC, description française et hashtags.
 
 **État : première version bêta.** Ce moteur n'est pas encore un éditeur haut de gamme entièrement automatique. Le recadrage est centré et non intelligent ; la sélection des moments forts repose sur des heuristiques, et aucune musique ou effet visuel tiers n'est injecté sans droits. Les fonctions sont soumises à une CI qui tente un véritable encodage des deux formats.
 
 ## Site web gratuit — Android / smartphone
 
-**Interface actuellement publiée : https://angled-gate-srzt937.shipstatic.com** (hébergement statique gratuit avec déploiement connecté sans date d'expiration indiquée). GitHub Pages reste une seconde adresse possible après activation des Pages dans les paramètres du dépôt.
+**Nouvelle interface multi-vidéo avec filtres : https://snappy-gate-x58qpre.shipstatic.com** (ancien site conservé : https://angled-gate-srzt937.shipstatic.com). (hébergement statique gratuit avec déploiement connecté sans date d'expiration indiquée). GitHub Pages reste une seconde adresse possible après activation des Pages dans les paramètres du dépôt.
 
 **Important :** les deux hébergeurs statiques ne peuvent pas traiter des vidéos. Il reste à connecter un moteur de montage HTTPS.
 
@@ -14,7 +14,7 @@ Application web **locale** construite pour produire de vrais montages à partir 
 
 L'interface statique est prévue sur **https://dbrckk.github.io/monteur-video/** avec publication automatique par GitHub Pages, après activation de Pages dans les réglages du dépôt. Elle peut s'ajouter à l'écran d'accueil Android (PWA).
 
-**Parcours smartphone :** choisir la vidéo dans la galerie Android, envoyer le fichier par blocs reprenables, garder l'onglet ouvert durant l'envoi, puis le traitement continue côté serveur même après fermeture. L'application conserve le dernier montage pour retrouver le MP4 et le télécharger depuis le téléphone.
+**Parcours smartphone :** sélectionner simultanément jusqu'à 10 vidéos dans la galerie Android, les envoyer une à une par blocs reprenables, puis produire **un seul MP4** incluant des moments de chaque rush. Laisser l'onglet ouvert durant l'envoi ; le traitement continue côté serveur après fermeture. Lorsque le montage est disponible, choisir parmi les filtres recommandés selon le thème (fitness, motivation, sport, lifestyle), appliquer celui souhaité sans perdre le master original, puis télécharger la version choisie sur le téléphone.
 
 L'interface seule ne peut pas produire le montage : il faut connecter par HTTPS un serveur personnel qui exécute FFmpeg et Whisper. Les requêtes depuis GitHub Pages sont autorisées par CORS explicite et nécessitent `APP_API_TOKEN` dans l'en-tête Authorization. Les téléchargements passent par un lien temporaire signé ; la clé API n'apparaît pas dans l'URL.
 
@@ -57,13 +57,29 @@ Sous Windows activer l'environnement virtuel dans le dossier Scripts. Une instal
 
 ## API et importation de longues vidéos
 
+### Un montage à partir de plusieurs vidéos
+
+1. Sélectionner 1 à 10 fichiers (MP4, MOV, MKV, WebM, AVI), en gardant l'ordre de sélection voulu.
+2. Pour chaque fichier, créer une session `POST /api/uploads`, transférer par `PATCH /api/uploads/{id}` en blocs d'au plus 16 Mio et contrôler l'offset par `GET /api/uploads/{id}`. Les sources peuvent être longues ; elles restent conservées sur le serveur durant le traitement.
+3. Créer un **unique montage** par `POST /api/montages` :
+   ```json
+   {"project_id":"00000000-0000-4000-8000-000000000001","upload_ids":["uuid-video-1","uuid-video-2"],"theme":"fitness","aspect":"vertical","seconds":45}
+   ```
+   `project_id` est facultatif mais recommandé : un UUID stable rend l'appel rejouable sans produire de doublon en cas de coupure réseau mobile. Les uploads doivent être terminés et chaque source ne peut être consommée que par un montage. Le moteur répartit les secondes entre les rushs, et sélectionne des séquences dans chacun avant concaténation.
+4. Interroger `GET /api/jobs/{id}` jusqu'à `done`. Le résultat comprend le nombre de sources, les extraits sélectionnés et la description.
+
+### Filtres recommandés après montage
+
+`GET /api/jobs/{id}/filters` retourne les looks disponibles, présentés en priorité selon le thème : Original, Impact, Acier, Énergie, Cinéma, Soleil, Noir & blanc. Le navigateur affiche un **aperçu CSS approximatif**, pas encore le fichier exporté. `POST /api/jobs/{id}/filters` avec `{"preset":"impact"}` lance un export FFmpeg non destructif dans la file d'attente. Interroger le même endpoint GET jusqu'au statut `done`, puis `GET /api/jobs/{id}/download-link?preset=impact` retourne un lien de téléchargement temporaire lié au filtre. Le master original reste intact et reste téléchargeable avec `preset=original`.
+
+
 1. POST /api/uploads avec un JSON de la forme {"filename":"session.mp4","size":12345678} renvoie un identifiant UUID.
 2. PATCH /api/uploads/{id} reçoit des blocs de données brutes de 16 Mio maximum ; fournir l'en-tête Upload-Offset. En cas d'échec, GET /api/uploads/{id} permet de retrouver l'offset exact et de reprendre.
 3. POST /api/uploads/{id}/complete avec {"theme":"fitness","aspect":"vertical","seconds":45} lance la production. Thèmes : fitness, motivation, sport, lifestyle, auto. Formats : vertical ou youtube. Durée : 10 à 180 secondes.
 4. GET /api/jobs/{id} expose la progression, le moteur de transcription réellement utilisé, les clips sélectionnés, la description et les hashtags.
-5. GET /api/jobs/{id}/download-link renvoie une URL MP4 signée valide pendant 15 minutes ; GET /api/jobs/{id}/download avec ce ticket télécharge le MP4 sans cookies tiers. DELETE /api/jobs/{id} supprime source et export une fois terminé.
+5. GET /api/jobs/{id}/download-link renvoie une URL MP4 signée valide pendant 15 minutes ; ajouter `?preset=<id>` pour choisir une version filtrée terminée. Le ticket est lié à l'identifiant du preset : il ne permet pas d'obtenir d'autres versions. DELETE /api/jobs/{id} supprime montage, originaux consommés et variantes terminées.
 
-La durée d'entrée n'a pas de plafond artificiel. La taille maximale (20 Gio par défaut) dépend aussi de l'espace disque disponible. Les longues sources restent coûteuses à décoder et à transcrire. SQLite persiste les états ; les tâches mises en file reprennent après un redémarrage, tandis qu'une tâche interrompue en plein rendu passe en état échec. Un seul rendu s'exécute simultanément pour protéger la mémoire. Les fichiers source sont conservés tant que l'utilisateur ne les supprime pas.
+La durée d'entrée n'a pas de plafond artificiel. La taille maximale par fichier (20 Gio par défaut) dépend aussi de l'espace disque disponible ; 10 fichiers de grande taille peuvent réclamer beaucoup d'espace. Le client envoie plusieurs vidéos dans le même projet, **séquentiellement** pour limiter la mémoire et les interruptions sur Android, pas simultanément sur le réseau. Les longues sources restent coûteuses à décoder et à transcrire. SQLite persiste les états ; les tâches mises en file reprennent après un redémarrage, tandis qu'une tâche interrompue en plein rendu passe en état échec. Un seul rendu s'exécute simultanément pour protéger la mémoire. Les fichiers source sont conservés tant que l'utilisateur ne les supprime pas.
 
 ## Limites connues et prochaines phases
 
@@ -77,7 +93,7 @@ La durée d'entrée n'a pas de plafond artificiel. La taille maximale (20 Gio pa
 
 ~~~bash
 pip install -r requirements-dev.txt
-python -m compileall -q editor.py server.py tests
+python -m compileall -q editor.py montage.py server.py tests
 python -m unittest discover -s tests -v
 ~~~
 
@@ -93,3 +109,10 @@ Le test d'intégration fabrique une courte vidéo source avec FFmpeg, produit r�
 Aucun code externe d'éditeur vidéo n'est recopié ni intégré sans étude de sa licence.
 
 **Sécurité :** exécuter en local par défaut ; utiliser HTTPS et des contrôles d'accès en cas d'hébergement distant. FFmpeg et les bibliothèques vidéo décodent des fichiers non fiables : maintenir les dépendances à jour et limiter les ressources système.
+
+### Limites spécifiques aux rushs multiples et aux filtres
+
+- Pour limiter charge et espace disque, un montage accepte 10 fichiers au maximum ; l'ordre de sélection détermine l'ordre narratif des rushs. Le choix des extraits reste heuristique, avec au moins une seconde visée par source, si chaque entrée est valide et suffisamment longue.
+- Les filtres sont des profils FFmpeg prédéfinis et contrôlés, non une génération IA de style ; l'aperçu CSS est indicatif. Le fichier filtré est réencodé avant téléchargement et peut demander du temps supplémentaire sur les vidéos longues.
+- Plusieurs exports filtrés peuvent être mis en file d'attente et partagent le worker FFmpeg ; le master n'est pas remplacé. La version originale est conservée.
+- Même sur un site statique gratuit, il faut un moteur FFmpeg/Whisper HTTPS accessible en permanence depuis le téléphone. Pas de transfert garanti en arrière-plan après la fermeture de Chrome Android.

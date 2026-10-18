@@ -145,7 +145,8 @@ def active_ranges(duration: float, silences: list[tuple[float, float]]) -> list[
 
 
 def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float, float]],
-               transcript: list[dict], target_seconds: int = 45) -> list[Clip]:
+               transcript: list[dict], target_seconds: float = 45,
+               allow_short: bool = False) -> list[Clip]:
     """Select highlights across the entire recording, respecting pauses and visual cuts.
 
     Stratified buckets prevent a long, low-dialogue video from collapsing into its
@@ -153,8 +154,9 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
     """
     from bisect import bisect_left
 
-    if not 10 <= target_seconds <= 180:
-        raise ValueError("La durée cible doit être comprise entre 10 et 180 secondes.")
+    minimum = 1 if allow_short else 10
+    if not minimum <= target_seconds <= 180:
+        raise ValueError(f"La durée cible doit être comprise entre {minimum} et 180 secondes.")
     ranges = active_ranges(duration, silences) or [(0.0, duration)]
     boundaries = sorted(scenes)
     candidates: list[Clip] = []
@@ -330,6 +332,7 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
 def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                aspect: str = "vertical", target_seconds: int = 45,
                transcribe: bool = True, size: int = 1080,
+               allow_short: bool = False,
                progress: Callable[[float, str], None] | None = None) -> dict:
     if aspect not in {"vertical", "youtube"}:
         raise ValueError("Format inconnu.")
@@ -347,7 +350,8 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     if progress:
         progress(0.32, "silence")
     silences = detect_silences(source, info["duration"], info["has_audio"])
-    clips = plan_clips(info["duration"], scenes, silences, transcript, target_seconds)
+    clips = plan_clips(info["duration"], scenes, silences, transcript, target_seconds,
+                       allow_short=allow_short)
     # Publication text must describe what survived editing, not unseen source footage.
     selected_speech = [phrase for phrase in transcript
                        if any(phrase["start"] < clip.end and phrase["end"] > clip.start
@@ -355,6 +359,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     metadata = social_metadata(theme, selected_speech, info["duration"])
     metadata.update({"aspect": aspect, "resolution": ("9:16" if aspect == "vertical" else "16:9"),
                      "speech_engine": asr_mode, "captions_generated": bool(selected_speech),
+                     "selected_transcript": selected_speech,
                      "scene_count": len(scenes),
                      "clips": [{"start": c.start, "end": c.end, "score": round(c.score, 2)}
                                for c in clips]})

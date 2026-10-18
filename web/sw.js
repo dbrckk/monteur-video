@@ -1,5 +1,5 @@
 // Cache only versioned static shell, never upload requests, secrets, or rendered videos.
-const CACHE = "monteur-static-v1";
+const CACHE = "monteur-static-v2";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));

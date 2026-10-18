@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from editor import THEMES, edit_video
+from montage import MAX_SOURCES, FILTER_PRESETS, edit_many, filter_catalog, apply_filter
 
 ROOT = Path(os.environ.get("EDITOR_DATA_DIR", "./data")).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -33,7 +34,8 @@ COOKIE_VALUE = hmac.new(API_TOKEN.encode(), b"monteur-session-v1", hashlib.sha25
 DOWNLOAD_SECRET = hmac.new(API_TOKEN.encode(), b"monteur-download-v1", hashlib.sha256).digest()
 DOWNLOAD_TTL_SECONDS = 15 * 60
 CORS_ORIGINS = sorted(set(
-    ["https://dbrckk.github.io", "https://angled-gate-srzt937.shipstatic.com"] +
+    ["https://dbrckk.github.io", "https://angled-gate-srzt937.shipstatic.com",
+     "https://snappy-gate-x58qpre.shipstatic.com"] +
     [origin.strip().rstrip("/") for origin in os.environ.get("MONTEUR_CORS_ORIGINS", "").split(",") if origin.strip()]
 ))
 if any(not origin.startswith("https://") or "*" in origin for origin in CORS_ORIGINS):
@@ -59,6 +61,14 @@ def initialize() -> None:
         )""")
         con.execute("UPDATE jobs SET status='failed', error='Traitement interrompu par un redémarrage' "
                     "WHERE status='processing'")
+        con.execute("""CREATE TABLE IF NOT EXISTS filter_exports (
+            job_id TEXT NOT NULL, preset TEXT NOT NULL,
+            status TEXT NOT NULL, progress REAL NOT NULL DEFAULT 0,
+            error TEXT, PRIMARY KEY(job_id, preset)
+        )""")
+        con.execute("UPDATE filter_exports SET status='failed', "
+                    "error='Application du filtre interrompue par un redémarrage' "
+                    "WHERE status='processing'")
 
 
 @asynccontextmanager
@@ -68,6 +78,11 @@ async def lifespan(app: FastAPI):
         pending = [x["id"] for x in con.execute("SELECT id FROM jobs WHERE status='queued'")]
     for ident in pending:
         POOL.submit(run_job, ident)
+    with database() as con:
+        filters = list(con.execute(
+            "SELECT job_id, preset FROM filter_exports WHERE status='queued'"))
+    for item in filters:
+        POOL.submit(run_filter, item["job_id"], item["preset"])
     yield
 
 
@@ -96,6 +111,15 @@ class ExportRequest(BaseModel):
     seconds: int = Field(default=45, ge=10, le=180)
 
 
+class MontageRequest(ExportRequest):
+    upload_ids: list[str] = Field(min_length=1, max_length=MAX_SOURCES)
+    project_id: str | None = None
+
+
+class FilterRequest(BaseModel):
+    preset: str
+
+
 def authorize(request: Request) -> None:
     """Accept same-origin session cookies or bearer API tokens.
 
@@ -116,12 +140,13 @@ def authorize(request: Request) -> None:
     raise HTTPException(status_code=401, detail="Authentification requise")
 
 
-def download_ticket(ident: str, expires: int) -> str:
-    message = f"{ident}:{expires}".encode()
+def download_ticket(ident: str, expires: int, preset: str = "original") -> str:
+    message = f"{ident}:{preset}:{expires}".encode()
     return hmac.new(DOWNLOAD_SECRET, message, hashlib.sha256).hexdigest()
 
 
-def validate_ticket(ident: str, expires: str | None, signature: str | None) -> bool:
+def validate_ticket(ident: str, expires: str | None, signature: str | None,
+                    preset: str = "original") -> bool:
     if not expires or not signature:
         return False
     try:
@@ -131,7 +156,7 @@ def validate_ticket(ident: str, expires: str | None, signature: str | None) -> b
     now = int(time())
     if expiration < now or expiration > now + DOWNLOAD_TTL_SECONDS:
         return False
-    return hmac.compare_digest(download_ticket(ident, expiration), signature)
+    return hmac.compare_digest(download_ticket(ident, expiration, preset), signature)
 
 
 
@@ -167,26 +192,89 @@ def run_job(ident: str) -> None:
     settings = json.loads(job["options"])
     try:
         update_job(ident, status="processing", stage="probe", progress=0.01)
-        result = edit_video(source_path(ident), folder / "final.mp4",
-                            theme=settings["theme"], aspect=settings["aspect"],
-                            target_seconds=settings["seconds"],
-                            progress=lambda value, stage: update_job(
-                                ident, progress=round(value, 3), stage=stage))
+        progress = lambda value, stage: update_job(
+            ident, progress=round(value, 3), stage=stage)
+        if "sources" in settings:
+            sources = [str(uuid.UUID(src)) for src in settings["sources"]]
+            with database() as con:
+                names = {
+                    row["id"]: row["filename"]
+                    for row in con.execute(
+                        f"SELECT id,filename FROM jobs WHERE id IN ({','.join('?' for _ in sources)})",
+                        sources)
+                }
+            result = edit_many(
+                [source_path(src) for src in sources], folder / "final.mp4",
+                theme=settings["theme"], aspect=settings["aspect"],
+                target_seconds=settings["seconds"],
+                source_names=[names[src] for src in sources],
+                progress=progress,
+            )
+        else:
+            result = edit_video(source_path(ident), folder / "final.mp4",
+                                theme=settings["theme"], aspect=settings["aspect"],
+                                target_seconds=settings["seconds"],
+                                progress=progress)
         (folder / "metadata.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         # Delete only temporary re-encoded segments: raw source remains for re-use.
         shutil.rmtree(folder / "segments", ignore_errors=True)
+        shutil.rmtree(folder / "rushes", ignore_errors=True)
         update_job(ident, status="done", progress=1.0, stage="done",
                    metadata=json.dumps(result, ensure_ascii=False))
     except Exception as exc:
         shutil.rmtree(folder / "segments", ignore_errors=True)
+        shutil.rmtree(folder / "rushes", ignore_errors=True)
         update_job(ident, status="failed", stage="failed",
                    error=f"{type(exc).__name__}: {str(exc)[:1500]}")
+
+
+def update_filter(ident: str, preset: str, **fields: object) -> None:
+    if not fields.keys() <= {"status", "progress", "error"}:
+        raise ValueError("Mise à jour de filtre non autorisée")
+    updates = ", ".join(f"{key}=?" for key in fields)
+    with database() as con:
+        con.execute(f"UPDATE filter_exports SET {updates} WHERE job_id=? AND preset=?",
+                    (*fields.values(), ident, preset))
+
+
+def run_filter(ident: str, preset: str) -> None:
+    """Post-process only the immutable finished master."""
+    folder = ROOT / ident
+    destination = folder / "filters" / f"{preset}.mp4"
+    try:
+        update_filter(ident, preset, status="processing", progress=0.01, error=None)
+        apply_filter(folder / "final.mp4", destination, preset,
+                     progress=lambda value, _: update_filter(
+                         ident, preset, progress=round(value, 3)))
+        update_filter(ident, preset, status="done", progress=1.0)
+    except Exception as exc:
+        destination.unlink(missing_ok=True)
+        update_filter(ident, preset, status="failed",
+                      error=f"{type(exc).__name__}: {str(exc)[:1500]}")
 
 
 @app.get("/", response_class=HTMLResponse)
 def homepage():
     return HTMLResponse(WEB.read_text(encoding="utf-8"))
+
+
+@app.get("/manifest.webmanifest")
+def mobile_manifest():
+    return FileResponse(WEB.parent / "manifest.webmanifest",
+                        media_type="application/manifest+json")
+
+
+@app.get("/icon.svg")
+def mobile_icon():
+    return FileResponse(WEB.parent / "icon.svg", media_type="image/svg+xml")
+
+
+@app.get("/sw.js")
+def mobile_service_worker():
+    return FileResponse(WEB.parent / "sw.js", media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/",
+                                 "Cache-Control": "no-cache"})
 
 
 @app.get("/api/health")
@@ -286,6 +374,63 @@ def complete_upload(ident: str, data: ExportRequest):
     return {"id": job["id"], "status": "queued"}
 
 
+@app.post("/api/montages", status_code=201, dependencies=[Depends(authorize)])
+def create_montage(data: MontageRequest):
+    """Atomically consume 1–10 fully uploaded rushes into one montage job.
+
+    An optional client-generated UUID makes retry safe if a mobile connection
+    drops after the server has already accepted the creation request.
+    """
+    if data.theme not in THEMES or data.aspect not in {"vertical", "youtube"}:
+        raise HTTPException(status_code=422, detail="Paramètres de montage inconnus")
+    try:
+        ids = [str(uuid.UUID(item)) for item in data.upload_ids]
+        ident = str(uuid.UUID(data.project_id)) if data.project_id else str(uuid.uuid4())
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="Identifiant invalide") from exc
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status_code=422, detail="Une vidéo ne peut apparaître deux fois")
+    if ident in ids:
+        raise HTTPException(status_code=422, detail="Identifiant de montage en conflit")
+    settings = {"theme": data.theme, "aspect": data.aspect,
+                "seconds": data.seconds, "sources": ids}
+    with database() as con:
+        con.execute("BEGIN IMMEDIATE")
+        existing = con.execute("SELECT * FROM jobs WHERE id=?", (ident,)).fetchone()
+        if existing is not None:
+            if existing["options"] and json.loads(existing["options"]) == settings:
+                return {"id": ident, "status": existing["status"],
+                        "source_count": len(ids), "reused": True}
+            raise HTTPException(status_code=409, detail="Identifiant de montage déjà utilisé")
+        rows = {
+            row["id"]: row
+            for row in con.execute(
+                f"SELECT * FROM jobs WHERE id IN ({','.join('?' for _ in ids)})", ids)
+        }
+        total_size = 0
+        for source_id in ids:
+            row = rows.get(source_id)
+            if row is None or row["status"] != "uploading":
+                raise HTTPException(status_code=409, detail="Fichier indisponible ou déjà utilisé")
+            source = source_path(source_id)
+            if not source.is_file() or source.stat().st_size != row["expected_size"]:
+                raise HTTPException(status_code=409, detail="Transfert incomplet")
+            total_size += row["expected_size"]
+        (ROOT / ident).mkdir(mode=0o700, exist_ok=False)
+        now = datetime.now(timezone.utc).isoformat()
+        con.execute(
+            "INSERT INTO jobs(id,filename,status,expected_size,stage,options,created_at)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (ident, f"Montage de {len(ids)} vidéos", "queued",
+             total_size, "queued", json.dumps(settings), now))
+        con.execute(
+            f"UPDATE jobs SET status='consumed',stage='consumed' "
+            f"WHERE id IN ({','.join('?' for _ in ids)})", ids)
+    POOL.submit(run_job, ident)
+    return {"id": ident, "status": "queued",
+            "source_count": len(ids), "reused": False}
+
+
 @app.get("/api/jobs/{ident}", dependencies=[Depends(authorize)])
 def job_status(ident: str):
     data = get_job(ident)
@@ -295,24 +440,99 @@ def job_status(ident: str):
             "metadata": json.loads(data["metadata"]) if data["metadata"] else None}
 
 
-@app.get("/api/jobs/{ident}/download-link", dependencies=[Depends(authorize)])
-def get_download_link(ident: str):
+@app.get("/api/jobs/{ident}/filters", dependencies=[Depends(authorize)])
+def list_job_filters(ident: str):
     job = get_job(ident)
-    if job["status"] != "done" or not (ROOT / job["id"] / "final.mp4").exists():
+    if job["status"] != "done":
+        raise HTTPException(status_code=409, detail="Le montage n'est pas encore terminé")
+    settings = json.loads(job["options"])
+    catalog = filter_catalog(settings["theme"])
+    with database() as con:
+        statuses = {
+            row["preset"]: dict(row)
+            for row in con.execute(
+                "SELECT preset,status,progress,error FROM filter_exports WHERE job_id=?",
+                (job["id"],))
+        }
+    for item in catalog:
+        state = statuses.get(item["id"])
+        item.update(status=state["status"] if state else (
+            "done" if item["id"] == "original" else "available"),
+            progress=state["progress"] if state else (1.0 if item["id"] == "original" else 0.0),
+            error=state["error"] if state else None)
+    return {"theme": settings["theme"], "filters": catalog}
+
+
+@app.post("/api/jobs/{ident}/filters", status_code=202, dependencies=[Depends(authorize)])
+def create_filter_export(ident: str, data: FilterRequest):
+    job = get_job(ident)
+    if job["status"] != "done":
+        raise HTTPException(status_code=409, detail="Le montage n'est pas terminé")
+    if data.preset not in FILTER_PRESETS or data.preset == "original":
+        raise HTTPException(status_code=422, detail="Filtre inconnu")
+    if not (ROOT / job["id"] / "final.mp4").exists():
+        raise HTTPException(status_code=404, detail="Montage original absent")
+    with database() as con:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            "SELECT * FROM filter_exports WHERE job_id=? AND preset=?",
+            (job["id"], data.preset)).fetchone()
+        if row is not None and row["status"] in {"done", "processing", "queued"}:
+            return {"preset": data.preset, "status": row["status"]}
+        if row:
+            con.execute(
+                "UPDATE filter_exports SET status='queued', progress=0, error=NULL "
+                "WHERE job_id=? AND preset=?", (job["id"], data.preset))
+        else:
+            con.execute(
+                "INSERT INTO filter_exports(job_id,preset,status) VALUES(?,?,'queued')",
+                (job["id"], data.preset))
+    POOL.submit(run_filter, job["id"], data.preset)
+    return {"preset": data.preset, "status": "queued"}
+
+
+@app.get("/api/jobs/{ident}/download-link", dependencies=[Depends(authorize)])
+def get_download_link(ident: str, preset: str = "original"):
+    job = get_job(ident)
+    if preset not in FILTER_PRESETS:
+        raise HTTPException(status_code=404, detail="Filtre inexistant")
+    if job["status"] != "done":
         raise HTTPException(status_code=404, detail="Montage non disponible")
+    if preset != "original":
+        with database() as con:
+            export = con.execute(
+                "SELECT status FROM filter_exports WHERE job_id=? AND preset=?",
+                (job["id"], preset)).fetchone()
+        if export is None or export["status"] != "done":
+            raise HTTPException(status_code=404, detail="Filtre non encore disponible")
+    destination = (ROOT / job["id"] / "final.mp4" if preset == "original"
+                   else ROOT / job["id"] / "filters" / f"{preset}.mp4")
+    if not destination.exists():
+        raise HTTPException(status_code=404, detail="Fichier vidéo absent")
     expires = int(time()) + DOWNLOAD_TTL_SECONDS
-    token = download_ticket(job["id"], expires)
-    return {"url": f"/api/jobs/{job['id']}/download?expires={expires}&ticket={token}",
-            "expires_in": DOWNLOAD_TTL_SECONDS}
+    token = download_ticket(job["id"], expires, preset)
+    return {"url": f"/api/jobs/{job['id']}/download?expires={expires}&ticket={token}&preset={preset}",
+            "expires_in": DOWNLOAD_TTL_SECONDS, "preset": preset}
 
 
 @app.get("/api/jobs/{ident}/download")
 def download_video(ident: str, request: Request, expires: str | None = None,
-                   ticket: str | None = None, inline: bool = False):
+                   ticket: str | None = None, inline: bool = False,
+                   preset: str = "original"):
     job = get_job(ident)
-    if not validate_ticket(job["id"], expires, ticket):
+    if preset not in FILTER_PRESETS:
+        raise HTTPException(status_code=404, detail="Filtre inconnu")
+    if not validate_ticket(job["id"], expires, ticket, preset):
         authorize(request)
-    destination = ROOT / job["id"] / "final.mp4"
+    if preset != "original":
+        with database() as con:
+            export = con.execute(
+                "SELECT status FROM filter_exports WHERE job_id=? AND preset=?",
+                (job["id"], preset)).fetchone()
+        if export is None or export["status"] != "done":
+            raise HTTPException(status_code=404, detail="Filtre indisponible")
+    destination = (ROOT / job["id"] / "final.mp4" if preset == "original"
+                   else ROOT / job["id"] / "filters" / f"{preset}.mp4")
     if job["status"] != "done" or not destination.exists():
         raise HTTPException(status_code=404, detail="Montage non disponible")
     return FileResponse(destination, media_type="video/mp4",
@@ -327,7 +547,15 @@ def delete_job(ident: str):
     job = get_job(ident)
     if job["status"] not in {"done", "failed", "uploading"}:
         raise HTTPException(status_code=409, detail="Traitement en cours")
+    settings = json.loads(job["options"]) if job["options"] else {}
+    attached = settings.get("sources", [])
     with database() as con:
+        con.execute("BEGIN IMMEDIATE")
+        con.execute("DELETE FROM filter_exports WHERE job_id=?", (job["id"],))
         con.execute("DELETE FROM jobs WHERE id=?", (job["id"],))
+        for source_id in attached:
+            con.execute("DELETE FROM jobs WHERE id=? AND status='consumed'", (source_id,))
     shutil.rmtree(ROOT / job["id"], ignore_errors=True)
-    return {"deleted": True}
+    for source_id in attached:
+        shutil.rmtree(ROOT / source_id, ignore_errors=True)
+    return {"deleted": True, "sources_deleted": len(attached)}
