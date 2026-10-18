@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from editor import THEMES, edit_video
+from montage import MAX_SOURCES, FILTER_PRESETS, edit_many, filter_catalog, apply_filter
 
 ROOT = Path(os.environ.get("EDITOR_DATA_DIR", "./data")).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -59,6 +60,14 @@ def initialize() -> None:
         )""")
         con.execute("UPDATE jobs SET status='failed', error='Traitement interrompu par un redémarrage' "
                     "WHERE status='processing'")
+        con.execute("""CREATE TABLE IF NOT EXISTS filter_exports (
+            job_id TEXT NOT NULL, preset TEXT NOT NULL,
+            status TEXT NOT NULL, progress REAL NOT NULL DEFAULT 0,
+            error TEXT, PRIMARY KEY(job_id, preset)
+        )""")
+        con.execute("UPDATE filter_exports SET status='failed', "
+                    "error='Application du filtre interrompue par un redémarrage' "
+                    "WHERE status='processing'")
 
 
 @asynccontextmanager
@@ -68,6 +77,11 @@ async def lifespan(app: FastAPI):
         pending = [x["id"] for x in con.execute("SELECT id FROM jobs WHERE status='queued'")]
     for ident in pending:
         POOL.submit(run_job, ident)
+    with database() as con:
+        filters = list(con.execute(
+            "SELECT job_id, preset FROM filter_exports WHERE status='queued'"))
+    for item in filters:
+        POOL.submit(run_filter, item["job_id"], item["preset"])
     yield
 
 
@@ -96,6 +110,15 @@ class ExportRequest(BaseModel):
     seconds: int = Field(default=45, ge=10, le=180)
 
 
+class MontageRequest(ExportRequest):
+    upload_ids: list[str] = Field(min_length=1, max_length=MAX_SOURCES)
+    project_id: str | None = None
+
+
+class FilterRequest(BaseModel):
+    preset: str
+
+
 def authorize(request: Request) -> None:
     """Accept same-origin session cookies or bearer API tokens.
 
@@ -116,12 +139,13 @@ def authorize(request: Request) -> None:
     raise HTTPException(status_code=401, detail="Authentification requise")
 
 
-def download_ticket(ident: str, expires: int) -> str:
-    message = f"{ident}:{expires}".encode()
+def download_ticket(ident: str, expires: int, preset: str = "original") -> str:
+    message = f"{ident}:{preset}:{expires}".encode()
     return hmac.new(DOWNLOAD_SECRET, message, hashlib.sha256).hexdigest()
 
 
-def validate_ticket(ident: str, expires: str | None, signature: str | None) -> bool:
+def validate_ticket(ident: str, expires: str | None, signature: str | None,
+                    preset: str = "original") -> bool:
     if not expires or not signature:
         return False
     try:
@@ -131,7 +155,7 @@ def validate_ticket(ident: str, expires: str | None, signature: str | None) -> b
     now = int(time())
     if expiration < now or expiration > now + DOWNLOAD_TTL_SECONDS:
         return False
-    return hmac.compare_digest(download_ticket(ident, expiration), signature)
+    return hmac.compare_digest(download_ticket(ident, expiration, preset), signature)
 
 
 
@@ -167,19 +191,39 @@ def run_job(ident: str) -> None:
     settings = json.loads(job["options"])
     try:
         update_job(ident, status="processing", stage="probe", progress=0.01)
-        result = edit_video(source_path(ident), folder / "final.mp4",
-                            theme=settings["theme"], aspect=settings["aspect"],
-                            target_seconds=settings["seconds"],
-                            progress=lambda value, stage: update_job(
-                                ident, progress=round(value, 3), stage=stage))
+        progress = lambda value, stage: update_job(
+            ident, progress=round(value, 3), stage=stage)
+        if "sources" in settings:
+            sources = [str(uuid.UUID(src)) for src in settings["sources"]]
+            with database() as con:
+                names = {
+                    row["id"]: row["filename"]
+                    for row in con.execute(
+                        f"SELECT id,filename FROM jobs WHERE id IN ({','.join('?' for _ in sources)})",
+                        sources)
+                }
+            result = edit_many(
+                [source_path(src) for src in sources], folder / "final.mp4",
+                theme=settings["theme"], aspect=settings["aspect"],
+                target_seconds=settings["seconds"],
+                source_names=[names[src] for src in sources],
+                progress=progress,
+            )
+        else:
+            result = edit_video(source_path(ident), folder / "final.mp4",
+                                theme=settings["theme"], aspect=settings["aspect"],
+                                target_seconds=settings["seconds"],
+                                progress=progress)
         (folder / "metadata.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         # Delete only temporary re-encoded segments: raw source remains for re-use.
         shutil.rmtree(folder / "segments", ignore_errors=True)
+        shutil.rmtree(folder / "rushes", ignore_errors=True)
         update_job(ident, status="done", progress=1.0, stage="done",
                    metadata=json.dumps(result, ensure_ascii=False))
     except Exception as exc:
         shutil.rmtree(folder / "segments", ignore_errors=True)
+        shutil.rmtree(folder / "rushes", ignore_errors=True)
         update_job(ident, status="failed", stage="failed",
                    error=f"{type(exc).__name__}: {str(exc)[:1500]}")
 
