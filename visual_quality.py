@@ -20,6 +20,8 @@ class VisualSample:
     luminance: float
     motion: float
     detail: float
+    chroma_u: float = 128.0
+    chroma_v: float = 128.0
 
 
 def _read_metrics(path: Path) -> dict[float, float]:
@@ -32,6 +34,28 @@ def _read_metrics(path: Path) -> dict[float, float]:
         found_value = re.search(r"lavfi\.signalstats\.YAVG=([0-9]+(?:\.[0-9]+)?)", line)
         if found_value and timestamp is not None:
             values[timestamp] = float(found_value.group(1))
+    return values
+
+
+def _read_chroma(path: Path) -> dict[float, tuple[float, float]]:
+    values: dict[float, tuple[float, float]] = {}
+    time = None
+    u = v = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        found_time = re.search(r"pts_time:([0-9]+(?:\\.[0-9]+)?)", line)
+        if found_time:
+            if time is not None and u is not None and v is not None:
+                values[time] = (u, v)
+            time = round(float(found_time.group(1)), 2)
+            u = v = None
+        found_u = re.search(r"lavfi\\.signalstats\\.UAVG=([0-9]+(?:\\.[0-9]+)?)", line)
+        found_v = re.search(r"lavfi\\.signalstats\\.VAVG=([0-9]+(?:\\.[0-9]+)?)", line)
+        if found_u:
+            u = float(found_u.group(1))
+        if found_v:
+            v = float(found_v.group(1))
+    if time is not None and u is not None and v is not None:
+        values[time] = (u, v)
     return values
 
 
@@ -52,7 +76,7 @@ def analyze_visual(source: Path, duration: float | None = None,
                      for key in ("light", "motion", "detail")}
             graph = (
                 "[0:v]fps=2,scale=192:-2,format=yuv420p,split=3[l][m][e];"
-                f"[l]signalstats,metadata=print:key=lavfi.signalstats.YAVG:file={paths['light']}[lo];"
+                f"[l]signalstats,metadata=print:file={paths['light']}[lo];"
                 f"[m]tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file={paths['motion']}[mo];"
                 f"[e]sobel,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file={paths['detail']}[eo]"
             )
@@ -66,11 +90,13 @@ def analyze_visual(source: Path, duration: float | None = None,
                              "-filter_complex", graph, "-map", "[lo]", "-map", "[mo]",
                              "-map", "[eo]", "-an", "-f", "null", "-"], timeout=90)
                     light = _read_metrics(paths["light"])
+                    chroma = _read_chroma(paths["light"])
                     motion = _read_metrics(paths["motion"])
                     detail = _read_metrics(paths["detail"])
                     collected.extend(
                         VisualSample(round(start + t, 2), light[t],
-                                     motion.get(t, 0.0), detail.get(t, 0.0))
+                                     motion.get(t, 0.0), detail.get(t, 0.0),
+                                     *chroma.get(t, (128.0, 128.0)))
                         for t in sorted(light)
                     )
                 except (OSError, RuntimeError, ValueError):
