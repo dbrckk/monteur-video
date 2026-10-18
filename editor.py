@@ -179,7 +179,8 @@ def active_ranges(duration: float, silences: list[tuple[float, float]]) -> list[
 def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float, float]],
                transcript: list[dict], target_seconds: float = 45,
                allow_short: bool = False,
-               visual_samples: list | None = None) -> list[Clip]:
+               visual_samples: list | None = None,
+               beat_seconds: float | None = None) -> list[Clip]:
     """Select highlights across the entire recording, respecting pauses and visual cuts.
 
     Stratified buckets prevent a long, low-dialogue video from collapsing into its
@@ -200,15 +201,18 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
         # evidence, audio silence is not grounds to discard the footage.
         ranges = [(0.0, duration)]
     boundaries = sorted(scenes)
+    # Hard, rhythmic cuts suit strength training and sport better than
+    # long uninterrupted shots. Slower themes receive longer phrases.
+    clip_span = max(2.0, min(6.0, 8 * beat_seconds)) if beat_seconds else 5.5
     candidates: list[Clip] = []
     for start, end in ranges:
         cursor = start
         while cursor < end - 1.0:
-            index = bisect_left(boundaries, cursor + 3.0)
+            index = bisect_left(boundaries, cursor + 1.3)
             next_scene = (boundaries[index]
-                          if index < len(boundaries) and boundaries[index] <= min(end, cursor + 7.0)
+                          if index < len(boundaries) and boundaries[index] <= min(end, cursor + clip_span)
                           else None)
-            stop = min(end, next_scene if next_scene is not None else cursor + 5.5)
+            stop = min(end, next_scene if next_scene is not None else cursor + clip_span)
             if stop - cursor < 1.0:
                 break
             spoken = " ".join(x["text"].lower() for x in transcript
@@ -253,6 +257,13 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
                                   for c in selected):
             return
         length = min(candidate.duration, remaining)
+        if beat_seconds and length >= 4 * beat_seconds:
+            # Prefer four-beat measures, or two beats for shorter actions.
+            quantized = math.floor((length + 0.02) / (4 * beat_seconds)) * 4 * beat_seconds
+            if quantized < 1.0:
+                quantized = math.floor((length + 0.02) / (2 * beat_seconds)) * 2 * beat_seconds
+            if quantized >= 1.0:
+                length = min(length, quantized)
         if length >= 1.0:
             selected.append(Clip(candidate.start, round(candidate.start + length, 3),
                                  candidate.score))
@@ -410,8 +421,11 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     if visual_samples is None:
         from visual_quality import analyze_visual
         visual_samples = analyze_visual(source, duration=info["duration"])
+    from soundtrack import beat_duration
+    beat_grid = beat_duration(theme) if theme in {"fitness", "sport"} else None
     clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
-                       allow_short=allow_short, visual_samples=visual_samples)
+                       allow_short=allow_short, visual_samples=visual_samples,
+                       beat_seconds=beat_grid)
     # Publication text must describe what survived editing, not unseen source footage.
     selected_speech = [phrase for phrase in transcript
                        if any(phrase["start"] < clip.end and phrase["end"] > clip.start
@@ -422,6 +436,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                      "selected_transcript": selected_speech,
                      "scene_count": len(scenes),
                      "visual_analysis": "motion_luminance_detail" if visual_samples else "unavailable",
+                     "cut_style": "beat_synced" if beat_grid else "editorial",
                      "clips": [{"start": c.start, "end": c.end, "score": round(c.score, 2)}
                                for c in clips]})
     if progress:
