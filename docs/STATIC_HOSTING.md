@@ -1,6 +1,10 @@
 # Site statique gratuit : Android en priorité
 
-**Adresse prévue :** https://dbrckk.github.io/monteur-video/
+**Site en ligne vérifié :** https://angled-gate-srzt937.shipstatic.com
+
+**GitHub Pages (en attente d'activation) :** https://dbrckk.github.io/monteur-video/
+
+Le premier workflow GitHub Pages a échoué lors de `actions/configure-pages`, car Pages n'est pas activé dans les réglages du dépôt. L'hébergement statique ShipStatic connecté rend dès maintenant l'interface accessible, gratuitement. Le moteur distant HTTPS reste indispensable pour réellement traiter les vidéos.
 
 GitHub Actions publie le dossier `web/` sur GitHub Pages à chaque changement de `main`. Dans **Settings > Pages > Build and deployment**, sélectionner **GitHub Actions** comme source, si nécessaire. La mise en ligne effective dépend de l'activation Pages et de la réussite du workflow « Publish static studio » : ne pas confondre URL prévue et site déjà publié.
 
@@ -31,7 +35,7 @@ Chrome Android -> GitHub Pages (interface statique gratuite)
 
 Le site statique n'héberge **ni fichiers sources, ni vidéos finales, ni moteur IA**. GitHub Pages n'exécute ni Python ni FFmpeg. Le traitement de vidéos de plusieurs Go nécessite CPU/RAM/disque et une machine accessible à distance. La disponibilité permanente d'un hébergement de calcul gratuit n'est pas garantie.
 
-L'API accepte les requêtes depuis l'origine explicite `https://dbrckk.github.io` (par défaut), plus les origines HTTPS déclarées avec `MONTEUR_CORS_ORIGINS`. Les requêtes sensibles exigent `APP_API_TOKEN`. En mode site statique, l'interface envoie le jeton dans l'en-tête Authorization pour chaque appel API, sans cookies tiers. Le téléchargement est autorisé par un **ticket HMAC signé à validité courte**, évitant de placer la clé API longue durée dans l'URL du MP4.
+L'API accepte les requêtes depuis les origines explicites `https://dbrckk.github.io` et `https://angled-gate-srzt937.shipstatic.com` (par défaut), plus les origines HTTPS déclarées avec `MONTEUR_CORS_ORIGINS`. Les requêtes sensibles exigent `APP_API_TOKEN`. En mode site statique, l'interface envoie le jeton dans l'en-tête Authorization pour chaque appel API, sans cookies tiers. Le téléchargement est autorisé par un **ticket HMAC signé à validité courte**, évitant de placer la clé API longue durée dans l'URL du MP4.
 
 Exemple de configuration serveur, sur une machine contrôlée :
 
