@@ -541,7 +541,19 @@
       }
       pollTimer = setTimeout(() => poll(id), 2500);
     } catch(error) {
-      if([401, 403, 404].includes(error.status)) {
+      if(error.status === 404) {
+        const canRetry = selectedFiles.length > 0 && recoveryAttempts < 1;
+        resetLostProject();
+        if(canRetry) {
+          recoveryAttempts++;
+          progress(0, "Reprise automatique", "Le serveur a perdu le projet : nouvel envoi des vidéos.");
+          button.disabled = true;
+          try { await createMontage(); }
+          catch(retryError) { showError(retryError); }
+        }
+        return;
+      }
+      if([401, 403].includes(error.status)) {
         showError(error);
         return;
       }
