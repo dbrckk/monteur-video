@@ -137,7 +137,9 @@
   const DEFAULT_BACKEND = "https://monteur-video-hd.onrender.com";
   const previousBackend = (localStorage.getItem("backendUrl") || "").replace(/\/$/, "");
   if(previousBackend === "https://monteur-video-beta.onrender.com") localStorage.removeItem("backendUrl");
-  const API_BASE = (localStorage.getItem("backendUrl") || DEFAULT_BACKEND).replace(/\/$/, "");
+  // Locally hosted installations and CI always use their own same-origin API.
+  const LOCAL_HOST = ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
+  const API_BASE = (localStorage.getItem("backendUrl") || (LOCAL_HOST ? "" : DEFAULT_BACKEND)).replace(/\/$/, "");
   const apiPath = path => API_BASE + path;
   const drop = $("drop"), input = $("video"), button = $("start");
   let pollTimer;
