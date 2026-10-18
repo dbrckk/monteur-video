@@ -4,6 +4,18 @@ Application web **mobile-first** avec moteur local ou distant sécurisé, constr
 
 **État : V1 fonctionnelle et validée en tests, sous réserve de disposer d'un ordinateur hébergeant le moteur.** Ce moteur n'est pas encore un éditeur haut de gamme entièrement automatique. Le recadrage est centré et non intelligent ; la sélection des moments forts repose sur des heuristiques, et aucune musique ou effet visuel tiers n'est injecté sans droits. Les fonctions sont soumises à une CI qui tente un véritable encodage des deux formats.
 
+## Démarrage du moteur sur un ordinateur (gratuit)
+
+Pour rendre **réellement opérationnelle** l'interface GitHub Pages depuis un smartphone, un ordinateur peut fournir le calcul FFmpeg avec un tunnel HTTPS gratuit :
+
+```bash
+git clone https://github.com/dbrckk/monteur-video.git
+cd monteur-video
+bash scripts/start-public.sh
+```
+
+Le script configure une clé API aléatoire, démarre Docker et publie un tunnel temporaire `https://…trycloudflare.com`. Reporter l'URL et la clé `APP_API_TOKEN` dans le site Android. **Le PC doit rester allumé** pendant les imports et rendus. Les fichiers sont conservés dans un volume Docker persistant. Ce mode évite de payer un serveur distant, mais le tunnel temporaire et les très gros uploads ne sont pas garantis. Détails : [guide du moteur HTTPS gratuit](docs/PUBLIC_TUNNEL.md).
+
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.
