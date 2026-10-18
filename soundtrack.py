@@ -153,8 +153,11 @@ def add_soundtrack(video: Path, theme: str, *, sound_mode: str = "auto",
         if progress:
             progress(0.95, "music")
         fade_start = max(0.0, duration - 0.65)
+        # When retaining a voice/gym ambience at 20%, pull music down so it
+        # remains audible instead of being drowned by the instrumental.
+        music_volume = 0.50 if original_volume > 0 else 0.88
         mix = (f"[0:a]aresample=48000,volume={original_volume:.2f}[ambient];"
-               f"[1:a]aresample=48000,volume=0.88,"
+               f"[1:a]aresample=48000,volume={music_volume:.2f},"
                f"atrim=duration={duration:.3f},asetpts=PTS-STARTPTS,"
                f"afade=t=in:st=0:d=0.18,"
                f"afade=t=out:st={fade_start:.3f}:d=0.65[beat];"
@@ -173,6 +176,7 @@ def add_soundtrack(video: Path, theme: str, *, sound_mode: str = "auto",
             progress(0.99, "music")
         info.update({"original_audio_volume": original_volume,
                      "source_audio_mode": sound_mode,
+                     "music_volume": music_volume,
                      "music_generated": True})
         return info
     finally:
