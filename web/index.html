@@ -51,6 +51,7 @@
     .secondary{border:1px solid #516451;color:#cafa51;background:transparent;border-radius:11px;padding:13px 16px;min-height:48px;cursor:pointer;font-weight:700}
     #resumeJob{display:none;margin-top:10px;width:100%}
     .rush-list{list-style:none;counter-reset:rush;padding:0;margin:12px 0 0;display:grid;gap:9px}.rush-list li{display:flex;gap:12px;align-items:center;padding:11px 12px;border:1px solid #34474e;border-radius:11px;background:#111e28;font-size:13px}.rush-no{display:grid;place-items:center;width:29px;height:29px;flex:none;border-radius:8px;background:#cafa51;color:#102112;font-weight:900}.rush-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rush-size{color:#a7b4bf;white-space:nowrap}
+    .rush-actions{display:flex;gap:5px;flex:none}.rush-actions button{min-width:32px;min-height:35px;padding:4px;border-radius:7px;border:1px solid #405252;background:#1b2b33;color:#d9f0df;cursor:pointer}.rush-actions button:disabled{opacity:.25;cursor:default}
     .filter-panel{display:none;margin-top:24px;border-top:1px solid #2d4247;padding-top:24px}.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;margin:17px 0}.filter-choice{display:flex;flex-direction:column;align-items:stretch;text-align:left;gap:6px;padding:9px;background:#0d1823;color:#e2edf2;border:1px solid #34424a;border-radius:12px;cursor:pointer;min-height:136px;transition:border-color .2s}.filter-choice[aria-pressed="true"]{border-color:#cafa51;box-shadow:0 0 0 1px #cafa51}.filter-choice strong{font-size:13px}.filter-choice small{font-size:11px;color:#a8bac3;line-height:1.4}.filter-swatch{height:57px;border-radius:7px;background:linear-gradient(140deg,#e9ad69 0%,#687b8e 42%,#17293c 100%)}.filter-apply{width:100%}.filter-apply:disabled{opacity:.45;cursor:not-allowed}
     @media(max-width:780px){header{margin-bottom:45px}.grid{grid-template-columns:1fr}.wrap{padding:20px 16px 50px}h1{letter-spacing:-1.7px}.card{padding:20px}.pill{font-size:11px}.drop{min-height:150px;padding:18px}.wrap{padding-bottom:calc(46px + env(safe-area-inset-bottom))}button,.download,select,input{min-height:48px} .preview video{width:100%;max-height:72dvh}.download{display:block;text-align:center;width:100%}.row{flex-direction:column;gap:0}}
   </style>
@@ -106,6 +107,7 @@
   <div class="preview" id="preview">
     <video id="resultVideo" controls playsinline preload="metadata"></video>
     <a class="download" id="download" href="#" download>Télécharger le MP4 sur mon téléphone ↓</a>
+    <button class="secondary" id="deleteJob" type="button" style="width:100%;margin-top:12px">Supprimer mes vidéos du serveur</button>
   </div>
   <section class="filter-panel" id="filterPanel" aria-label="Filtres de finition">
     <h2>03 / Personnaliser le rendu</h2>
@@ -176,7 +178,7 @@
 
   function selectFiles(items) {
     const files = Array.from(items || []);
-    if(!files.length) return;
+    if(!files.length || button.disabled) return;
     if(files.length > MAX_FILES) return showError(new Error("Maximum " + MAX_FILES + " vidéos par montage."));
     if(files.some(file => file.size <= 0)) return showError(new Error("Un fichier sélectionné est vide."));
     if(new Set(files.map(fileFingerprint)).size !== files.length)
@@ -196,7 +198,23 @@
       const size = document.createElement("span");
       size.className = "rush-size";
       size.textContent = readableSize(file.size);
-      li.append(number, name, size);
+      const actions = document.createElement("span");
+      actions.className = "rush-actions";
+      for(const [symbol, delta, description] of [["↑", -1, "Monter"], ["↓", 1, "Descendre"]]) {
+        const move = document.createElement("button");
+        move.type = "button";
+        move.textContent = symbol;
+        move.disabled = index + delta < 0 || index + delta >= files.length;
+        move.setAttribute("aria-label", description + " " + file.name);
+        move.addEventListener("click", () => {
+          if(button.disabled) return;
+          const next = [...selectedFiles];
+          [next[index], next[index + delta]] = [next[index + delta], next[index]];
+          selectFiles(next);
+        });
+        actions.append(move);
+      }
+      li.append(number, name, size, actions);
       $("selectedList").append(li);
     });
     $("message").className = "muted";
@@ -368,6 +386,26 @@
     } catch(error) {
       $("applyFilter").disabled = false;
       $("filterStatus").textContent = "Erreur du filtre : " + error.message;
+    }
+  });
+  $("deleteJob").addEventListener("click", async () => {
+    if(!activeJob) return;
+    if(!confirm("Supprimer définitivement le montage, les vidéos sources et tous les filtres du serveur ?")) return;
+    try {
+      await request("/api/jobs/" + encodeURIComponent(activeJob), {method:"DELETE"});
+      clearTimeout(pollTimer);
+      clearTimeout(filterTimer);
+      localStorage.removeItem("lastJob");
+      $("resumeJob").style.display = "none";
+      $("preview").style.display = "none";
+      $("filterPanel").style.display = "none";
+      $("metadata").style.display = "none";
+      $("resultVideo").removeAttribute("src");
+      $("resultVideo").load();
+      activeJob = null;
+      progress(0, "Fichiers supprimés", "Les sources, le montage et les versions filtrées ont été retirés du serveur.");
+    } catch(error) {
+      $("filterStatus").textContent = "Suppression impossible : " + error.message;
     }
   });
   $("download").addEventListener("click", async event => {
