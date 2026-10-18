@@ -212,7 +212,8 @@ def _score(item: dict, energy: str, index: int, vocals: str,
         weight -= 1.2
     if vocals == "vocals" and item.get("vocals") == "instrumental":
         weight -= 3
-    weight += _tempo_fit(_verified_bpm(item), video_bpm)\n    if artist in {"unknown", "original audio"}:
+    weight += _tempo_fit(_verified_bpm(item), video_bpm)
+    if artist in {"unknown", "original audio"}:
         weight -= 0.8
     return round(weight, 4)
 
@@ -226,7 +227,8 @@ def recommend_reels_audio(theme: str, profile: dict | None = None,
     """
     if vocals not in {"any", "instrumental", "vocals"}:
         raise ValueError("Préférence musicale inconnue")
-    energy = (profile or {}).get("energy", "medium")\n    video_bpm = _verified_bpm(profile or {})
+    energy = (profile or {}).get("energy", "medium")
+    video_bpm = _verified_bpm(profile or {})
     if energy not in {"low", "medium", "high"}:
         energy = "medium"
     route = CHARTS.get(theme, CHARTS["auto"])
@@ -245,7 +247,9 @@ def recommend_reels_audio(theme: str, profile: dict | None = None,
     output = []
     for index, entry in ranked:
         candidate = dict(entry)
-        candidate["score"] = _score(entry, energy, index, vocals, video_bpm)\n        candidate["bpm"] = _verified_bpm(entry)\n        candidate["tempo_match_verified"] = candidate["bpm"] is not None and video_bpm is not None
+        candidate["score"] = _score(entry, energy, index, vocals, video_bpm)
+        candidate["bpm"] = _verified_bpm(entry)
+        candidate["tempo_match_verified"] = candidate["bpm"] is not None and video_bpm is not None
         candidate["reels_rank"] = candidate.pop("rank", index + 1)
         candidate["url"] = candidate.get("url") or _instagram_url(candidate["source_url"])
         # If Instagram temporarily throttles metadata, the cited source page
@@ -257,7 +261,11 @@ def recommend_reels_audio(theme: str, profile: dict | None = None,
     return {
         "selected": output[0] if output else None,
         "alternatives": output[1:],
-        "visual_energy": energy,\n        "target_bpm": video_bpm,\n        "matching_factors": ["video_motion", "scene_density", "reels_theme",\n                             "chart_rank", "vocal_preference",\n                             "verified_tempo_when_available"],
+        "visual_energy": energy,
+        "target_bpm": video_bpm,
+        "matching_factors": ["video_motion", "scene_density", "reels_theme",
+                             "chart_rank", "vocal_preference",
+                             "verified_tempo_when_available"],
         "matching": "video_motion_and_similar_reels_category",
         "source": "SoundMatcha public Instagram Reels audio charts",
         "catalog_status": catalog_source,
