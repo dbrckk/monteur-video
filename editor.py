@@ -400,6 +400,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                allow_short: bool = False,
                detected_scenes: list[float] | None = None,
                visual_samples: list | None = None,
+               music_profile: dict | None = None,
                progress: Callable[[float, str], None] | None = None) -> dict:
     if aspect not in {"vertical", "youtube"}:
         raise ValueError("Format inconnu.")
@@ -422,7 +423,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
         from visual_quality import analyze_visual
         visual_samples = analyze_visual(source, duration=info["duration"])
     from soundtrack import beat_duration
-    beat_grid = beat_duration(theme) if theme in {"fitness", "sport"} else None
+    beat_grid = (60.0 / music_profile["bpm"] if music_profile else beat_duration(theme)) if theme in {"fitness", "sport"} else None
     clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
                        allow_short=allow_short, visual_samples=visual_samples,
                        beat_seconds=beat_grid)

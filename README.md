@@ -38,6 +38,12 @@ Les clips de sport et musculation sont réduits à des phrases de **8 temps envi
 
 Ces instrumentaux originaux fournissent une solution utilisable gratuitement et sans clé, mais ne prétendent pas être des musiques populaires sous licence TikTok ni un catalogue professionnel produit par des artistes. Sans Whisper, l'option automatique ne peut pas déterminer si la voix est intéressante : elle privilégie donc la musique seule. Les métadonnées d'export indiquent la musique, le BPM, sa provenance et le niveau de son source réellement utilisé.
 
+### Sélection musicale directement adaptée aux images (V2)
+
+La V2 analyse les signaux vidéo FFmpeg déjà calculés (intensité des mouvements, qualité/luminosité et fréquence de changement des plans), puis choisit une **direction musicale distincte pour chaque montage** : échauffement posé, entraînement régulier ou action intense. Par exemple, le même thème fitness peut aboutir à **120, 136 ou 154 BPM**. La piste originale est ensuite générée à ce tempo, et les séquences sportives utilisent le même tempo pour choisir des durées de coupe sur les mesures. L'analyse agrégée sur plusieurs rushs ne dépend pas de leur ordre d'import.
+
+Cette fonction s'inspire du **principe d'appariement entre musique et vidéo**, mais ne reproduit ni le catalogue TikTok, ni son moteur de recommandation propriétaire, ni des morceaux d'artistes non licenciés. La détection reste fondée sur des heuristiques visuelles, sans classification sémantique des exercices ni analyse des goûts personnels. Si les images sont trop sombres ou les signaux insuffisants, le thème fournit un choix musical de secours.
+
 ## Site web gratuit — Android / smartphone
 
 **Site officiel gratuit et vérifié : https://dbrckk.github.io/monteur-video/**. La publication GitHub Pages est opérationnelle via GitHub Actions. **Miroir gratuit vérifié : https://snappy-gate-x58qpre.shipstatic.com**.

@@ -299,6 +299,7 @@ def run_job(ident: str) -> None:
         music = add_soundtrack(folder / "final.mp4", settings["theme"],
                                sound_mode=settings.get("sound_mode", "auto"),
                                voice_present=bool(result.get("selected_transcript")),
+                               music_profile=result.get("music_profile"),
                                progress=lambda p, stage: progress(0.93 + p * 0.065, stage))
         result["soundtrack"] = music
         (folder / "metadata.json").write_text(
