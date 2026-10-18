@@ -27,6 +27,7 @@
     .drop:hover,.drop.drag{border-color:#cafa51;background:#263326}
     .icon{font-size:37px;color:#cafa51}.drop strong{font-size:16px}.drop small{color:#9aa8af;overflow-wrap:anywhere}
     input[type=file]{display:none}
+    [hidden]{display:none!important}
     label.setting{display:block;margin:22px 0 8px;color:#d7e2eb;font-weight:700;font-size:13px}
     select,input[type=number],input[type=password],input[type=url]{appearance:none;width:100%;background:#0e1720;border:1px solid #34424a;color:#fff;font-size:15px;padding:14px 15px;border-radius:11px;outline:none}
     select:focus,input:focus{border-color:#cafa51}
@@ -87,7 +88,7 @@
     <label class="setting" for="backend">Adresse HTTPS du moteur de montage</label><input id="backend" type="url" placeholder="https://api.example.com"><button type="button" class="copy" id="saveBackend" style="margin-top:10px">Enregistrer le moteur</button><label class="setting" for="token" id="tokenLabel" hidden>Clé d'accès (serveur privé uniquement)</label>
     <input id="token" type="password" autocomplete="off" hidden placeholder="Clé privée pour serveur privé">
     <button id="testBackend" class="secondary" type="button" style="width:100%;margin-top:10px">Vérifier la connexion du moteur</button>
-    <p id="backendStatus" class="muted" role="status" aria-live="polite">Site gratuit : un moteur FFmpeg doit être relié pour produire les MP4.</p>
+    <p id="backendStatus" class="muted" role="status" aria-live="polite">Moteur HD gratuit préconfiguré · aucun code ni clé d’accès à saisir.</p>
     <p class="muted"><a href="https://github.com/dbrckk/monteur-video/blob/main/docs/REMOTE_ANDROID.md" target="_blank" rel="noopener noreferrer" style="color:#cafa51">Guide : activer le moteur gratuitement depuis un PC</a></p>
     <div class="hint" id="mobileHelp">Pendant l’envoi, garde cet onglet ouvert et le téléphone connecté. Si l’envoi est interrompu, reviens ici et sélectionne à nouveau les mêmes vidéos pour reprendre le transfert. Après l’envoi complet, le serveur poursuit le montage même si tu quittes le site.</div>
     <button id="start" class="btn">Créer mon montage →</button>
@@ -128,11 +129,16 @@
     <p id="quality" class="muted"></p>
   </div>
 </section>
-<footer>Montage et stockage effectués par votre propre serveur. Utilise des vidéos et musiques dont tu possèdes les droits. Une connexion HTTPS et une clé APP_API_TOKEN sont nécessaires avant exposition sur Internet.</footer>
+<footer>Traitement temporaire sur le moteur HD en ligne, sans clé d’accès. Service gratuit soumis à des limites de taille et de disponibilité ; télécharge rapidement ton MP4. Utilise uniquement des images et musiques dont tu possèdes les droits.</footer>
 </main>
 <script>
 (() => {
-  const $ = id => document.getElementById(id); const API_BASE = (localStorage.getItem("backendUrl") || "https://monteur-video-hd.onrender.com").replace(/\/$/, ""); const apiPath = path => API_BASE + path;
+  const $ = id => document.getElementById(id);
+  const DEFAULT_BACKEND = "https://monteur-video-hd.onrender.com";
+  const previousBackend = (localStorage.getItem("backendUrl") || "").replace(/\/$/, "");
+  if(previousBackend === "https://monteur-video-beta.onrender.com") localStorage.removeItem("backendUrl");
+  const API_BASE = (localStorage.getItem("backendUrl") || DEFAULT_BACKEND).replace(/\/$/, "");
+  const apiPath = path => API_BASE + path;
   const drop = $("drop"), input = $("video"), button = $("start");
   let pollTimer;
   let pollFailures = 0;
