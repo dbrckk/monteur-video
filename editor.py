@@ -146,52 +146,74 @@ def active_ranges(duration: float, silences: list[tuple[float, float]]) -> list[
 
 def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float, float]],
                transcript: list[dict], target_seconds: int = 45) -> list[Clip]:
+    """Select highlights across the entire recording, respecting pauses and visual cuts.
+
+    Stratified buckets prevent a long, low-dialogue video from collapsing into its
+    first minute. Within each bucket, speech relevance and scene cuts take priority.
+    """
+    from bisect import bisect_left
+
     if not 10 <= target_seconds <= 180:
         raise ValueError("La durée cible doit être comprise entre 10 et 180 secondes.")
     ranges = active_ranges(duration, silences) or [(0.0, duration)]
-    candidates = []
+    boundaries = sorted(scenes)
+    candidates: list[Clip] = []
     for start, end in ranges:
         cursor = start
         while cursor < end - 1.0:
-            natural_cuts = [s for s in scenes if cursor + 3.0 <= s <= min(end, cursor + 7.0)]
-            stop = min(end, natural_cuts[0] if natural_cuts else cursor + 5.5)
+            index = bisect_left(boundaries, cursor + 3.0)
+            next_scene = (boundaries[index]
+                          if index < len(boundaries) and boundaries[index] <= min(end, cursor + 7.0)
+                          else None)
+            stop = min(end, next_scene if next_scene is not None else cursor + 5.5)
             if stop - cursor < 1.0:
                 break
             spoken = " ".join(x["text"].lower() for x in transcript
                               if x["start"] < stop and x["end"] > cursor)
             bonus = min(5, sum(1 for token in MOTIVATORS if token in spoken))
-            scene_bonus = 0.4 if any(abs(s - cursor) < 0.8 for s in scenes) else 0
+            near = bisect_left(boundaries, cursor - 0.8)
+            scene_bonus = (0.4 if near < len(boundaries)
+                           and abs(boundaries[near] - cursor) < 0.8 else 0.0)
             score = 1.0 + bonus + scene_bonus + min(2.0, len(spoken) / 120)
             candidates.append(Clip(round(cursor, 3), round(stop, 3), score))
             cursor = stop
     if not candidates:
         return [Clip(0.0, duration, 1.0)]
-    # Add mild temporal diversity so a two-hour input does not yield one contiguous passage.
-    ranked = sorted(candidates, key=lambda c: (-c.score, c.start))
-    chosen: list[Clip] = []
+
+    bucket_count = min(len(candidates), max(1, math.ceil(target_seconds / 5.5)))
+    buckets: list[list[Clip]] = [[] for _ in range(bucket_count)]
+    for clip in candidates:
+        group = min(bucket_count - 1, int(clip.start / duration * bucket_count))
+        buckets[group].append(clip)
+
+    # For equal scores, prefer the center of each time bucket, not always the earliest.
+    representatives = []
+    for i, bucket in enumerate(buckets):
+        if bucket:
+            center = duration * (i + 0.5) / bucket_count
+            representatives.append(max(bucket, key=lambda c: (c.score, -abs(c.start - center))))
+
+    selected: list[Clip] = []
     remaining = min(float(target_seconds), duration)
-    for candidate in ranked:
-        if remaining < 1.1:
+
+    def include(candidate: Clip) -> None:
+        nonlocal remaining
+        if remaining < 1.0 or any(candidate.start < c.end and candidate.end > c.start
+                                  for c in selected):
+            return
+        length = min(candidate.duration, remaining)
+        if length >= 1.0:
+            selected.append(Clip(candidate.start, round(candidate.start + length, 3),
+                                 candidate.score))
+            remaining -= length
+
+    for representative in sorted(representatives, key=lambda c: (-c.score, c.start)):
+        include(representative)
+    for candidate in sorted(candidates, key=lambda c: (-c.score, c.start)):
+        include(candidate)
+        if remaining < 1.0:
             break
-        if any(abs(candidate.start - c.start) < min(12.0, duration / 8)
-               for c in chosen) and len(candidates) > 4:
-            continue
-        size = min(candidate.duration, remaining)
-        if size < 1.0:
-            continue
-        chosen.append(Clip(candidate.start, candidate.start + size, candidate.score))
-        remaining -= size
-    if remaining >= 1.1:
-        for candidate in ranked:
-            if any(candidate.start < c.end and candidate.end > c.start for c in chosen):
-                continue
-            size = min(candidate.duration, remaining)
-            if size >= 1:
-                chosen.append(Clip(candidate.start, candidate.start + size, candidate.score))
-                remaining -= size
-            if remaining < 1.1:
-                break
-    return sorted(chosen, key=lambda x: x.start)
+    return sorted(selected, key=lambda c: c.start)
 
 
 def social_metadata(theme: str, transcript: list[dict], duration: float) -> dict:
