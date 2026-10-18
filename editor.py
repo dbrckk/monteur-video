@@ -56,6 +56,8 @@ def execute(command: list[str], timeout: int | None = None) -> str:
         raise RuntimeError(f"Executable manquant : {command[0]}") from exc
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(f"{command[0]} : {(exc.stderr or '')[-1300:]}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"{command[0]} : analyse interrompue après {timeout} s") from exc
     return result.stderr + "\n" + result.stdout
 
 
@@ -74,16 +76,38 @@ def probe_media(source: Path) -> dict:
             "has_audio": any(s["codec_type"] == "audio" for s in info["streams"])}
 
 
-def detect_scenes(source: Path, duration: float) -> list[float]:
-    # Detection happens on a downscaled 2 FPS stream, keeping very long sources feasible.
-    output = execute(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "info",
-                      "-i", str(source), "-an", "-vf",
-                      "fps=2,scale=320:-2,select='gt(scene,0.27)',showinfo",
-                      "-f", "null", "-"])
-    return sorted({round(float(m), 2) for m in
-                   re.findall(r"pts_time:([0-9]+(?:\.[0-9]+)?)", output)
-                   if 0.5 < float(m) < duration - 0.5})
+def analysis_windows(duration: float) -> list[tuple[float, float]]:
+    """Sample long videos via seeks instead of decoding their entire timeline."""
+    if not math.isfinite(duration) or duration <= 0:
+        return []
+    budget = max(8.0, min(60.0, float(os.getenv("MONTEUR_ANALYSIS_SECONDS", "24"))))
+    if duration <= budget:
+        return [(0.0, duration)]
+    count = min(4, max(2, math.ceil(budget / 6.0)))
+    width = budget / count
+    return [(round((duration - width) * i / (count - 1), 3), round(width, 3))
+            for i in range(count)]
 
+
+def detect_scenes(source: Path, duration: float,
+                  progress: Callable[[float], None] | None = None) -> list[float]:
+    """Bound CPU consumption; scene scanning failure must not block an edit."""
+    windows = analysis_windows(duration)
+    events: set[float] = set()
+    for i, (start, length) in enumerate(windows):
+        try:
+            output = execute(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "info",
+                              "-ss", str(start), "-i", str(source), "-t", str(length),
+                              "-an", "-vf", "fps=2,scale=320:-2,select='gt(scene,0.27)',showinfo",
+                              "-f", "null", "-"], timeout=90)
+            events.update(round(start + float(m), 2) for m in
+                          re.findall(r"pts_time:([0-9]+(?:\.[0-9]+)?)", output)
+                          if 0.5 < float(m) < length - 0.5)
+        except (RuntimeError, OSError):
+            pass
+        if progress:
+            progress((i + 1) / len(windows))
+    return sorted(t for t in events if 0.5 < t < duration - 0.5)
 
 def detect_silences(source: Path, duration: float, has_audio: bool) -> list[tuple[float, float]]:
     if not has_audio:
