@@ -189,3 +189,5 @@ Aucun code externe d'éditeur vidéo n'est recopié ni intégré sans étude de 
 Le mode **Auto** peut proposer un montage de 10 ou 15 secondes, même à partir d'un long rush, lorsque l'activité visuelle est concentrée sur quelques instants. Chaque rush est analysé avec FFmpeg à **2 images/seconde, en 192 px**, sans modèle lourd : variation entre images (mouvement), luminance, détails visuels (proxy de netteté), fonds noirs et images figées. Les passages silencieux sont préservés si l'image montre une activité utile. Les analyses sont réutilisées lors de la sélection pour éviter un second calcul. Si l'analyse visuelle échoue, le montage reste possible avec la sélection classique.
 
 Ces heuristiques **ne reconnaissent pas réellement** les exercices, les personnes ou les mouvements sportifs, et un mouvement de caméra peut être confondu avec l'action. Elles aident à choisir les plans, mais ne garantissent pas la détection du meilleur instant. La résolution publique reste **720p HD**, en portrait ou paysage.
+
+<!-- Stabilisation : validation CI du classement musical par tempo vérifié. -->
