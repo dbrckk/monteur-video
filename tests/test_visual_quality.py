@@ -17,6 +17,11 @@ class VisualScoringTests(unittest.TestCase):
         self.assertLess(score, -4)
         self.assertEqual(usable_ranges(frames, 5), [])
 
+    def test_three_second_frozen_frame_is_not_selected(self):
+        frozen = [VisualSample(i * 0.5, 125, 0, 32) for i in range(12)]
+        moving = [VisualSample(6 + i * 0.5, 125, 8, 32) for i in range(6)]
+        self.assertEqual(usable_ranges(frozen + moving, 9), [(6.0, 9)])
+
     def test_rewards_movement_and_fine_detail(self):
         sharp = [VisualSample(i * 0.5, 120, 9, 33) for i in range(10)]
         blurred = [VisualSample(i * 0.5, 120, 5, 10) for i in range(10)]
