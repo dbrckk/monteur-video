@@ -1,0 +1,19 @@
+# Optional free HTTPS public tunnel. Start with:
+# docker compose -f compose.yaml -f compose.public.yaml --profile public up -d --build
+# Read the random HTTPS URL from: docker compose ... logs tunnel
+services:
+  monteur:
+    environment:
+      APP_API_TOKEN: ${APP_API_TOKEN:?Run scripts/start-public.sh first}
+    # Keep the rendering API bound to localhost on the host.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["public"]
+    command: tunnel --no-autoupdate --url http://monteur:8000
+    depends_on:
+      monteur:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
