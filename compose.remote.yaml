@@ -8,6 +8,5 @@ services:
       monteur:
         condition: service_healthy
     restart: unless-stopped
-    read_only: true
     security_opt:
       - no-new-privileges:true
