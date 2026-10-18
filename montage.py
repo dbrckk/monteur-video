@@ -186,6 +186,23 @@ def narrative_order(sources: Sequence[Path], samples: Sequence[list]) -> list[in
     return [ranked[0], *ranked[2:], ranked[1]]
 
 
+def chronological_order(sources: Sequence[Path], samples: Sequence[list],
+                        info: Sequence[dict]) -> tuple[list[int], str]:
+    """Preserve actual camera chronology only if every rush has reliable UTC time.
+
+    A partial set of capture dates is not enough to reconstruct the timeline.
+    When unavailable, a deterministic visual-energy progression is preferred
+    over misleading Android upload-order or modified-time guesses.
+    """
+    if len(sources) != len(info) or len(sources) != len(samples):
+        raise ValueError("Métadonnées chronologiques incohérentes")
+    timestamps = [item.get("captured_at") for item in info]
+    if timestamps and all(isinstance(x, str) and x for x in timestamps):
+        return sorted(range(len(sources)),
+                      key=lambda i: (timestamps[i], _content_fingerprint(sources[i]))), "capture_time"
+    return narrative_order(sources, samples), "energy_arc_no_reliable_timestamps"
+
+
 def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitness",
               aspect: str = "vertical", target_seconds: int = 45,
               source_names: Sequence[str] | None = None,
@@ -235,7 +252,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         scene_count=sum(map(len, scene_cache)),
         source_seconds=sum(item["duration"] for item in info))
     budgets = allocation([item["duration"] for item in info], target_seconds)
-    order = narrative_order([Path(source) for source in sources], quality_cache)
+    order, sequence_strategy = chronological_order(\n        [Path(source) for source in sources], quality_cache, info)
     if progress:
         progress(0.32, "story")
     if len(sources) == 1:
@@ -251,8 +268,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         result["duration_mode"] = "auto" if auto_mode else "manual"
         result["source_count"] = 1
         result["music_profile"] = music_profile
-        result["sequence_strategy"] = "energy_arc"
-        result["sequence_order"] = [0]
+        result["sequence_strategy"] = sequence_strategy
+        result["sequence_order"] = [0]\n        result["capture_timestamps"] = [info[0].get("captured_at")]
         result["sources"] = [{
             "index": 0, "name": source_names[0] if source_names else Path(sources[0]).name,
             "duration_seconds": round(info[0]["duration"], 2),
@@ -311,8 +328,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
         "music_profile": music_profile,
-        "sequence_strategy": "energy_arc",
-        "sequence_order": order,
+        "sequence_strategy": sequence_strategy,
+        "sequence_order": order,\n        "capture_timestamps": [item.get("captured_at") for item in info],
         "visual_analysis": ("motion_luminance_detail" if any(
             x["visual_analysis"] != "unavailable" for x in details) else "unavailable"),
         "sources": details,
