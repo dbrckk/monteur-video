@@ -116,19 +116,27 @@ def usable_ranges(samples: list[VisualSample], duration: float) -> list[tuple[fl
                 visible_frames[k] = False
         i = j
     start: float | None = None
-    last = 0.0
+    last: float | None = None
     for sample, visible in zip(samples, visible_frames):
+        # Sparse window sampling must not mark unseen minutes as verified footage.
+        if start is not None and last is not None and sample.time - last > 1.5:
+            end = min(duration, last + 0.5)
+            if end - start >= 1:
+                intervals.append((start, end))
+            start = None
         if visible:
             if start is None:
                 start = sample.time
             last = sample.time
-        elif start is not None:
-            end = min(duration, sample.time)
-            if end - start >= 1:
-                intervals.append((start, end))
-            start = None
-    if start is not None:
-        end = min(duration, max(last + 0.5, duration if duration - last < 1.0 else last + 0.5))
+        else:
+            if start is not None:
+                end = min(duration, sample.time)
+                if end - start >= 1:
+                    intervals.append((start, end))
+                start = None
+            last = sample.time
+    if start is not None and last is not None:
+        end = min(duration, last + 0.5)
         if end - start >= 1:
             intervals.append((start, end))
     return intervals
