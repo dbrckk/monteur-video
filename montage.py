@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import os
+import hashlib
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -143,6 +144,47 @@ def allocation(durations: Sequence[float], requested: int) -> list[float]:
     return budgets
 
 
+def _content_fingerprint(path: Path) -> str:
+    """Stable source tie-breaker independent of Android upload order or filename."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        digest.update(stream.read(65536))
+        length = stream.seek(0, 2)
+        if length > 65536:
+            stream.seek(max(0, length - 65536))
+            digest.update(stream.read(65536))
+    digest.update(str(length).encode("ascii"))
+    return digest.hexdigest()
+
+
+def narrative_order(sources: Sequence[Path], samples: Sequence[list]) -> list[int]:
+    """Visual-energy arc: context -> effort builds -> peak -> calmer closing shot.
+
+    These are measured shot properties, not a claim to understand exercise
+    semantics. Content hashes make ties independent of upload order.
+    """
+    if len(sources) != len(samples):
+        raise ValueError("Analyse des rushs incohérente")
+    if len(sources) < 2:
+        return list(range(len(sources)))
+
+    def features(index: int) -> tuple[float, float, str]:
+        usable = [x for x in samples[index] if 25 <= x.luminance <= 230
+                  and x.detail >= 2]
+        if usable:
+            motion = sorted(min(24, max(0, x.motion)) for x in usable)
+            activity = motion[int((len(motion) - 1) * 0.70)]
+            clarity = sum(min(48, x.detail) for x in usable) / len(usable)
+            # Visual energy is primary; clarity avoids a blurred establishing shot.
+            return round(activity + 0.04 * clarity, 3), round(clarity, 3), _content_fingerprint(sources[index])
+        return -1.0, -1.0, _content_fingerprint(sources[index])
+
+    ranked = sorted(range(len(sources)), key=features)
+    if len(ranked) <= 2:
+        return ranked
+    return [ranked[0], *ranked[2:], ranked[1]]
+
+
 def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitness",
               aspect: str = "vertical", target_seconds: int = 45,
               source_names: Sequence[str] | None = None,
@@ -155,15 +197,32 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         raise ValueError(f"Sélectionner entre 1 et {MAX_SOURCES} vidéos")
     if source_names is not None and len(source_names) != len(sources):
         raise ValueError("Nombre de noms incohérent")
-    # Inspect each file before any expensive rendering.
-    info = [probe_media(Path(source)) for source in sources]
+    # Publish real milestones during preparation: the previous 51% stage could
+    # remain frozen for minutes while FFmpeg silently scanned whole recordings.
+    info = []
+    for i, source in enumerate(sources):
+        if progress:
+            progress(0.01 + i / len(sources) * 0.07, "probe")
+        info.append(probe_media(Path(source)))
+        if progress:
+            progress(0.01 + (i + 1) / len(sources) * 0.07, "probe")
     auto_mode = target_seconds == 0
-    scene_cache = ([detect_scenes(Path(src), item["duration"])
-                    for src, item in zip(sources, info)] if auto_mode else None)
-    quality_cache = ([analyze_visual(Path(src)) for src in sources] if auto_mode else None)
+    scene_cache: list[list[float]] = []
+    quality_cache: list[list] = []
+    for i, (source, item) in enumerate(zip(sources, info)):
+        base = 0.08 + i / len(sources) * 0.12
+        scene_cache.append(detect_scenes(
+            Path(source), item["duration"],
+            progress=(lambda p, base=base: progress(
+                base + p * 0.12 / len(sources), "scenes")) if progress else None))
+    for i, (source, item) in enumerate(zip(sources, info)):
+        base = 0.20 + i / len(sources) * 0.12
+        quality_cache.append(analyze_visual(
+            Path(source), duration=item["duration"],
+            progress=(lambda p, base=base: progress(
+                base + p * 0.12 / len(sources), "quality")) if progress else None))
     if auto_mode:
         analyzed = [sample for rush in quality_cache for sample in rush]
-        # Optical change is a proxy for action, not workout recognition.
         activity_seconds = (sum(0.5 for x in analyzed if x.motion >= 3.5 and
                                 25 <= x.luminance <= 230 and x.detail >= 4)
                             if analyzed else None)
@@ -171,15 +230,22 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                                             [len(s) for s in scene_cache],
                                             activity_seconds=activity_seconds)
     budgets = allocation([item["duration"] for item in info], target_seconds)
+    order = narrative_order([Path(source) for source in sources], quality_cache)
+    if progress:
+        progress(0.32, "story")
     if len(sources) == 1:
         result = edit_video(Path(sources[0]), destination, theme=theme, aspect=aspect,
                             target_seconds=target_seconds, transcribe=transcribe,
-                            size=size, progress=progress,
-                            detected_scenes=scene_cache[0] if scene_cache is not None else None,
-                            visual_samples=quality_cache[0] if quality_cache is not None else None)
+                            size=size,
+                            progress=(lambda p, stage: progress(0.32 + p * 0.62, stage))
+                            if progress else None,
+                            detected_scenes=scene_cache[0],
+                            visual_samples=quality_cache[0])
         result["target_duration_seconds"] = target_seconds
         result["duration_mode"] = "auto" if auto_mode else "manual"
         result["source_count"] = 1
+        result["sequence_strategy"] = "energy_arc"
+        result["sequence_order"] = [0]
         result["sources"] = [{
             "index": 0, "name": source_names[0] if source_names else Path(sources[0]).name,
             "duration_seconds": round(info[0]["duration"], 2),
@@ -194,26 +260,28 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
     details = []
     selected_speech = []
     combined_clips = []
-    for i, (source, duration, budget) in enumerate(zip(sources, info, budgets)):
-        part = work / f"rush-{i:02}.mp4"
+    for position, index in enumerate(order):
+        source, duration, budget = sources[index], info[index], budgets[index]
+        part = work / f"rush-{position:02}.mp4"
         if progress:
-            progress(0.02 + i / len(sources) * 0.88, "scenes")
+            progress(0.32 + position / len(sources) * 0.62, "highlights")
         child = edit_video(
             Path(source), part, theme=theme, aspect=aspect,
             target_seconds=budget, transcribe=transcribe, size=size,
             allow_short=True,
-            detected_scenes=scene_cache[i] if scene_cache is not None else None,
-            visual_samples=quality_cache[i] if quality_cache is not None else None,
-            progress=(lambda p, stage, i=i: progress(
-                min(0.91, 0.02 + (i + p) / len(sources) * 0.88), stage))
+            detected_scenes=scene_cache[index],
+            visual_samples=quality_cache[index],
+            progress=(lambda p, stage, position=position: progress(
+                min(0.94, 0.32 + (position + p) / len(sources) * 0.62), stage))
             if progress else None,
         )
         rendered.append(part)
         selected_speech.extend(child.get("selected_transcript", []))
-        combined_clips.extend({"source_index": i, **clip} for clip in child["clips"])
+        combined_clips.extend({"source_index": index, "sequence_position": position,
+                               **clip} for clip in child["clips"])
         details.append({
-            "index": i,
-            "name": source_names[i] if source_names else Path(source).name,
+            "index": index, "sequence_position": position,
+            "name": source_names[index] if source_names else Path(source).name,
             "duration_seconds": round(duration["duration"], 2),
             "rendered_seconds": child["rendered_duration_seconds"],
             "speech_engine": child["speech_engine"],
@@ -224,7 +292,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
     execute(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
              "-f", "concat", "-safe", "0", "-i", str(concat),
              "-map", "0:v:0", "-map", "0:a:0",
-             "-c", "copy", "-movflags", "+faststart", str(destination)])
+             "-c", "copy", "-movflags", "+faststart", str(destination)], timeout=180)
     if progress:
         progress(0.98, "render")
     output = social_metadata(theme, selected_speech, sum(x["duration"] for x in info))
@@ -234,6 +302,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "duration_mode": "auto" if auto_mode else "manual",
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
+        "sequence_strategy": "energy_arc",
+        "sequence_order": order,
         "visual_analysis": ("motion_luminance_detail" if any(
             x["visual_analysis"] != "unavailable" for x in details) else "unavailable"),
         "sources": details,
@@ -267,7 +337,7 @@ def apply_filter(source: Path, destination: Path, preset: str,
                  "-vf", FILTER_PRESETS[preset]["vf"],
                  "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                  "-pix_fmt", "yuv420p", "-c:a", "copy",
-                 "-movflags", "+faststart", str(temporary)])
+                 "-movflags", "+faststart", str(temporary)], timeout=1200)
         if progress:
             progress(0.95, "filter")
         probe_media(temporary)

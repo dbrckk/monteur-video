@@ -56,6 +56,8 @@ def execute(command: list[str], timeout: int | None = None) -> str:
         raise RuntimeError(f"Executable manquant : {command[0]}") from exc
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(f"{command[0]} : {(exc.stderr or '')[-1300:]}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"{command[0]} : analyse interrompue après {timeout} s") from exc
     return result.stderr + "\n" + result.stdout
 
 
@@ -74,16 +76,38 @@ def probe_media(source: Path) -> dict:
             "has_audio": any(s["codec_type"] == "audio" for s in info["streams"])}
 
 
-def detect_scenes(source: Path, duration: float) -> list[float]:
-    # Detection happens on a downscaled 2 FPS stream, keeping very long sources feasible.
-    output = execute(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "info",
-                      "-i", str(source), "-an", "-vf",
-                      "fps=2,scale=320:-2,select='gt(scene,0.27)',showinfo",
-                      "-f", "null", "-"])
-    return sorted({round(float(m), 2) for m in
-                   re.findall(r"pts_time:([0-9]+(?:\.[0-9]+)?)", output)
-                   if 0.5 < float(m) < duration - 0.5})
+def analysis_windows(duration: float) -> list[tuple[float, float]]:
+    """Sample long videos via seeks instead of decoding their entire timeline."""
+    if not math.isfinite(duration) or duration <= 0:
+        return []
+    budget = max(8.0, min(60.0, float(os.getenv("MONTEUR_ANALYSIS_SECONDS", "24"))))
+    if duration <= budget:
+        return [(0.0, duration)]
+    count = min(4, max(2, math.ceil(budget / 6.0)))
+    width = budget / count
+    return [(round((duration - width) * i / (count - 1), 3), round(width, 3))
+            for i in range(count)]
 
+
+def detect_scenes(source: Path, duration: float,
+                  progress: Callable[[float], None] | None = None) -> list[float]:
+    """Bound CPU consumption; scene scanning failure must not block an edit."""
+    windows = analysis_windows(duration)
+    events: set[float] = set()
+    for i, (start, length) in enumerate(windows):
+        try:
+            output = execute(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "info",
+                              "-ss", str(start), "-i", str(source), "-t", str(length),
+                              "-an", "-vf", "fps=2,scale=320:-2,select='gt(scene,0.27)',showinfo",
+                              "-f", "null", "-"], timeout=90)
+            events.update(round(start + float(m), 2) for m in
+                          re.findall(r"pts_time:([0-9]+(?:\.[0-9]+)?)", output)
+                          if 0.5 < float(m) < length - 0.5)
+        except (RuntimeError, OSError):
+            pass
+        if progress:
+            progress((i + 1) / len(windows))
+    return sorted(t for t in events if 0.5 < t < duration - 0.5)
 
 def detect_silences(source: Path, duration: float, has_audio: bool) -> list[tuple[float, float]]:
     if not has_audio:
@@ -336,13 +360,18 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
                    "-ss", str(clip.start), "-i", str(source)]
         if not has_audio:
             command += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+        # Brief fade at every cut limits audible clicks in mixed microphone /
+        # background-audio rushes without adding unlicensed music.
+        audio_fade = (f"afade=t=in:st=0:d=0.06,"
+                      f"afade=t=out:st={max(0.06, clip.duration - 0.08):.3f}:d=0.08")
         command += ["-t", str(clip.duration), "-map", "0:v:0",
                     "-map", "0:a:0" if has_audio else "1:a:0",
-                    "-vf", scaling, "-r", "30", "-c:v", "libx264",
-                    "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2",
+                    "-vf", scaling, "-af", audio_fade, "-r", "30", "-c:v", "libx264",
+                    "-threads", "2", "-preset", "veryfast", "-crf", "20",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+                    "-ar", "48000", "-ac", "2",
                     "-map_metadata", "-1", "-shortest", str(part)]
-        execute(command)
+        execute(command, timeout=600)
         files.append(part)
         if progress:
             progress(0.40 + (i + 1) / len(clips) * 0.52, "render")
@@ -350,7 +379,7 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
     concat.write_text("".join(f"file '{p.name}'\n" for p in files), encoding="utf-8")
     execute(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
              "-f", "concat", "-safe", "0", "-i", str(concat),
-             "-c", "copy", "-movflags", "+faststart", str(destination)])
+             "-c", "copy", "-movflags", "+faststart", str(destination)], timeout=180)
     metadata["rendered_duration_seconds"] = round(sum(c.duration for c in clips), 2)
 
 
@@ -374,13 +403,14 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     if progress:
         progress(0.25, "scenes")
     scenes = detected_scenes if detected_scenes is not None else detect_scenes(source, info["duration"])
+    # Gym repetitions are meaningful even with no soundtrack; clip selection
+    # no longer consults audio silence ranges, so skip the expensive full decode.
     if progress:
-        progress(0.32, "silence")
-    silences = detect_silences(source, info["duration"], info["has_audio"])
+        progress(0.32, "highlights")
     if visual_samples is None:
         from visual_quality import analyze_visual
-        visual_samples = analyze_visual(source)
-    clips = plan_clips(info["duration"], scenes, silences, transcript, target_seconds,
+        visual_samples = analyze_visual(source, duration=info["duration"])
+    clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
                        allow_short=allow_short, visual_samples=visual_samples)
     # Publication text must describe what survived editing, not unseen source footage.
     selected_speech = [phrase for phrase in transcript
