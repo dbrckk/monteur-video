@@ -48,6 +48,7 @@ jobs:
             -H 'Authorization: Bearer smoke-test-secret-example-length-1234' \
             http://127.0.0.1:18000/api/session)" = 200
           docker inspect --format '{{.State.Health.Status}}' monteur-v1-smoke
+          docker exec monteur-v1-smoke python -c "import os; assert os.environ['HF_HOME']=='/data/huggingface'"
       - name: Capture container logs
         if: always()
         run: docker logs monteur-v1-smoke || true

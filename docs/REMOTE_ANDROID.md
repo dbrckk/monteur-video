@@ -79,7 +79,7 @@ Par défaut :
 - **72 heures** de conservation pour un envoi abandonné ; **14 jours** pour un montage terminé ou échoué. Ces délais se règlent avec `UPLOAD_TTL_HOURS` et `RESULT_TTL_DAYS` dans `.env`. Le serveur nettoie les fichiers périmés au démarrage puis périodiquement.
 - Un seul rendu/filtre exécuté à la fois pour éviter la saturation mémoire. Les autres sont mis en file d'attente SQLite.
 - Le format final est H.264/AAC en MP4 avec `faststart`, adapté au téléchargement et à la lecture sur les téléphones Android.
-- Le Dockerfile installe faster-whisper par défaut pour la transcription CPU ; au premier rendu vocal, le modèle peut nécessiter un téléchargement initial. Pour désactiver cette option et alléger le déploiement, ajoutez `INSTALL_WHISPER=0` dans `.env` puis reconstruisez Docker. Le montage reste fonctionnel sans sous-titres automatiques.
+- Le Dockerfile installe faster-whisper par défaut pour la transcription CPU ; au premier rendu vocal, le modèle peut nécessiter un téléchargement initial. **Le modèle est mis en cache dans le volume Docker persistant** (`/data/huggingface`) et n'est pas retéléchargé lors des reconstructions ordinaires de l'image. Pour désactiver cette option et alléger le déploiement, ajoutez `INSTALL_WHISPER=0` dans `.env` puis reconstruisez Docker. Le montage reste fonctionnel sans sous-titres automatiques.
 
 Attention : le rendu de vidéos très longues exige du **temps CPU, de la mémoire et beaucoup d'espace disque**. La connexion mobile peut ralentir les envois ; il est conseillé d'utiliser le Wi-Fi et l'alimentation secteur. **Android ne garantit pas les téléchargements vers un site lorsque Chrome est fermé ou suspendu**, même si les envois peuvent être repris en resélectionnant les fichiers.
 
