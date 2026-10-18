@@ -15,6 +15,7 @@ from typing import Callable, Sequence
 from editor import THEMES, detect_scenes, edit_video, execute, probe_media, social_metadata
 from visual_quality import analyze_visual
 from soundtrack import select_music_profile
+from color_grade import grade_plan
 
 MAX_SOURCES = 10
 FILTER_PRESETS = {
@@ -186,6 +187,24 @@ def narrative_order(sources: Sequence[Path], samples: Sequence[list]) -> list[in
     return [ranked[0], *ranked[2:], ranked[1]]
 
 
+def chronological_order(sources: Sequence[Path], samples: Sequence[list],
+                        info: Sequence[dict]) -> tuple[list[int], str]:
+    """Preserve actual camera chronology only if every rush has reliable UTC time.
+
+    A partial set of capture dates is not enough to reconstruct the timeline.
+    When unavailable, a deterministic visual-energy progression is preferred
+    over misleading Android upload-order or modified-time guesses.
+    """
+    if len(sources) != len(info) or len(sources) != len(samples):
+        raise ValueError("Métadonnées chronologiques incohérentes")
+    timestamps = [item.get("captured_at") for item in info]
+    if timestamps and len(set(timestamps)) > 1 and all(
+            isinstance(x, str) and x for x in timestamps):
+        return sorted(range(len(sources)),
+                      key=lambda i: (timestamps[i], _content_fingerprint(sources[i]))), "capture_time"
+    return narrative_order(sources, samples), "energy_arc_no_reliable_timestamps"
+
+
 def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitness",
               aspect: str = "vertical", target_seconds: int = 45,
               source_names: Sequence[str] | None = None,
@@ -234,8 +253,10 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         theme, [sample for rush in quality_cache for sample in rush],
         scene_count=sum(map(len, scene_cache)),
         source_seconds=sum(item["duration"] for item in info))
+    grades = grade_plan(quality_cache, theme)
     budgets = allocation([item["duration"] for item in info], target_seconds)
-    order = narrative_order([Path(source) for source in sources], quality_cache)
+    order, sequence_strategy = chronological_order(
+        [Path(source) for source in sources], quality_cache, info)
     if progress:
         progress(0.32, "story")
     if len(sources) == 1:
@@ -246,13 +267,16 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                             if progress else None,
                             detected_scenes=scene_cache[0],
                             visual_samples=quality_cache[0],
-                            music_profile=music_profile)
+                            music_profile=music_profile,
+                            grade_filter=grades["source_grades"][0]["filter"])
         result["target_duration_seconds"] = target_seconds
         result["duration_mode"] = "auto" if auto_mode else "manual"
         result["source_count"] = 1
         result["music_profile"] = music_profile
-        result["sequence_strategy"] = "energy_arc"
+        result["color_grade"] = grades
+        result["sequence_strategy"] = sequence_strategy
         result["sequence_order"] = [0]
+        result["capture_timestamps"] = [info[0].get("captured_at")]
         result["sources"] = [{
             "index": 0, "name": source_names[0] if source_names else Path(sources[0]).name,
             "duration_seconds": round(info[0]["duration"], 2),
@@ -279,6 +303,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             detected_scenes=scene_cache[index],
             visual_samples=quality_cache[index],
             music_profile=music_profile,
+            grade_filter=grades["source_grades"][index]["filter"],
             progress=(lambda p, stage, position=position: progress(
                 min(0.94, 0.32 + (position + p) / len(sources) * 0.62), stage))
             if progress else None,
@@ -294,6 +319,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             "rendered_seconds": child["rendered_duration_seconds"],
             "speech_engine": child["speech_engine"],
             "visual_analysis": child.get("visual_analysis", "unavailable"),
+            "captured_at": duration.get("captured_at"),
+            "color_grade": grades["source_grades"][index]["correction"],
         })
     concat = work / "playlist.txt"
     concat.write_text("".join(f"file '{part.name}'\n" for part in rendered), encoding="utf-8")
@@ -311,8 +338,10 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
         "music_profile": music_profile,
-        "sequence_strategy": "energy_arc",
+        "color_grade": grades,
+        "sequence_strategy": sequence_strategy,
         "sequence_order": order,
+        "capture_timestamps": [item.get("captured_at") for item in info],
         "visual_analysis": ("motion_luminance_detail" if any(
             x["visual_analysis"] != "unavailable" for x in details) else "unavailable"),
         "sources": details,

@@ -113,7 +113,7 @@
   <aside class="card">
     <h2>Le processus</h2>
     <div class="step"><span class="n">1</span><div><strong>Analyse des rushs</strong><p>Lecture de la vidéo, repérage des changements de plans et des passages parlés.</p></div></div>
-    <div class="step"><span class="n">2</span><div><strong>Fusion des meilleurs moments</strong><p>Analyse du mouvement et de la qualité des images : les vidéos sont réorganisées automatiquement pour un rythme progressif, indépendamment de l’ordre d’envoi.</p></div></div>
+    <div class="step"><span class="n">2</span><div><strong>Fusion des meilleurs moments</strong><p>Le moteur respecte la chronologie des prises de vue lorsque les dates de capture sont disponibles, sinon il crée une progression visuelle cohérente. Les couleurs et la luminosité sont harmonisées entre les rushs.</p></div></div>
     <div class="step"><span class="n">3</span><div><strong>Finition musicale</strong><p>Encodage HD, musique instrumentale originale adaptée au thème, son des rushs réduit ou coupé et sous-titres si une transcription existe.</p></div></div>
     <div class="step"><span class="n">4</span><div><strong>Filtres et publication</strong><p>Après le rendu, sélection d’un look conseillé pour le thème, export MP4 final, description et hashtags.</p></div></div>
     <p class="muted">Les choix artistiques avancés, le suivi automatique du sujet et l'étalonnage cinématographique restent des évolutions à valider.</p>
@@ -611,8 +611,12 @@
         const captionsLabel = meta.captions_generated
           ? "Sous-titres issus de la transcription réelle de la voix."
           : "Sans transcription : aucun sous-titre ni tag vocal inventé.";
-        const narrativeLabel = meta.sequence_strategy === "energy_arc" && meta.source_count > 1
-          ? "Rushs organisés par intensité visuelle (introduction, montée, pic, conclusion). " : "";
+        const narrativeLabel = meta.sequence_strategy === "capture_time"
+          ? "Rushs organisés selon leurs dates de tournage vérifiées. "
+          : meta.source_count > 1
+          ? "Dates de tournage incomplètes : montage organisé par intensité visuelle. " : "";
+        const colorLabel = meta.color_grade?.source_grades?.some(g => g.measured)
+          ? "Étalonnage automatique : exposition et couleurs harmonisées entre les plans. " : "";
         const soundtrack = meta.soundtrack || {};
         const match = meta.music_profile || {};
         const matched = match.selection_method === "visual_motion_scene_density"
@@ -628,7 +632,7 @@
             " — " + meta.reels_music.selected.artist +
             ". À ajouter dans Instagram pour bénéficier de sa bibliothèque musicale. "
           : "";
-        $("quality").textContent = durationLabel + modeLabel + narrativeLabel + musicLabel + instagramLabel + analysisLabel + captionsLabel;
+        $("quality").textContent = durationLabel + modeLabel + narrativeLabel + colorLabel + musicLabel + instagramLabel + analysisLabel + captionsLabel;
         return;
       }
       pollTimer = setTimeout(() => poll(id), 2500);

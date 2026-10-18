@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 from functools import lru_cache
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -71,8 +72,28 @@ def probe_media(source: Path) -> dict:
     duration = float(info.get("format", {}).get("duration") or video.get("duration") or 0)
     if not math.isfinite(duration) or duration < 0.5:
         raise ValueError("Durée vidéo invalide ou insuffisante.")
+    # Prefer camera capture metadata over upload time or Android filesystem times.
+    # Reject dates lacking a timezone: comparing local and UTC timestamps is unsafe.
+    tags = [video.get("tags") or {}, info.get("format", {}).get("tags") or {}]
+    captured = None
+    for collection in tags:
+        for key, value in collection.items():
+            if key.lower() not in {"creation_time", "com.apple.quicktime.creationdate",
+                                   "date", "com.android.capture.fps.creation_time"}:
+                continue
+            try:
+                raw_date = str(value).strip().replace("Z", "+00:00")
+                parsed = datetime.fromisoformat(raw_date)
+                if parsed.tzinfo is not None and 2000 <= parsed.year <= 2100:
+                    captured = parsed.astimezone(timezone.utc).isoformat()
+                    break
+            except (ValueError, TypeError, OverflowError):
+                continue
+        if captured:
+            break
     return {"duration": duration,
             "width": int(video["width"]), "height": int(video["height"]),
+            "captured_at": captured,
             "has_audio": any(s["codec_type"] == "audio" for s in info["streams"])}
 
 
@@ -350,7 +371,8 @@ def create_captions(path: Path, clip: Clip, transcript: list[dict], vertical: bo
 
 def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
            transcript: list[dict], vertical: bool, has_audio: bool,
-           size: int = 1080, progress: Callable[[float, str], None] | None = None) -> None:
+           size: int = 1080, progress: Callable[[float, str], None] | None = None,
+           grade_filter: str | None = None) -> None:
     if not clips:
         raise ValueError("Aucun passage utilisable.")
     work = destination.parent / "segments"
@@ -363,6 +385,8 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
         part = work / f"{i:04}.mp4"
         scaling = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
                    f"crop={w}:{h},setsar=1")
+        if grade_filter:
+            scaling += "," + grade_filter
         ass = work / f"{i:04}.ass"
         if create_captions(ass, clip, transcript, vertical):
             # Segments are named with UUID parent / numeric basename: safe for FFmpeg quoting.
@@ -401,6 +425,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                detected_scenes: list[float] | None = None,
                visual_samples: list | None = None,
                music_profile: dict | None = None,
+               grade_filter: str | None = None,
                progress: Callable[[float, str], None] | None = None) -> dict:
     if aspect not in {"vertical", "youtube"}:
         raise ValueError("Format inconnu.")
@@ -422,6 +447,9 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     if visual_samples is None:
         from visual_quality import analyze_visual
         visual_samples = analyze_visual(source, duration=info["duration"])
+    if grade_filter is None:
+        from color_grade import grade_plan
+        grade_filter = grade_plan([visual_samples or []], theme)["source_grades"][0]["filter"]
     from soundtrack import beat_duration
     beat_grid = (60.0 / music_profile["bpm"] if music_profile else beat_duration(theme)) if theme in {"fitness", "sport"} else None
     clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
@@ -438,12 +466,14 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                      "scene_count": len(scenes),
                      "visual_analysis": "motion_luminance_detail" if visual_samples else "unavailable",
                      "cut_style": "beat_synced" if beat_grid else "editorial",
+                     "auto_color_grading": bool(grade_filter),
                      "clips": [{"start": c.start, "end": c.end, "score": round(c.score, 2)}
                                for c in clips]})
     if progress:
         progress(0.40, "render")
     render(source, destination, clips, metadata, selected_speech,
-           aspect == "vertical", info["has_audio"], size, progress)
+           aspect == "vertical", info["has_audio"], size, progress,
+           grade_filter=grade_filter)
     if progress:
         progress(1.0, "done")
     return metadata
