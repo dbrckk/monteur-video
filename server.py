@@ -35,6 +35,7 @@ CLEANUP_INTERVAL_SECONDS = 6 * 3600
 API_TOKEN = os.environ.get("APP_API_TOKEN", "")
 PUBLIC_DEMO = os.environ.get("MONTEUR_PUBLIC_DEMO", "0") == "1"
 PUBLIC_MAX_ACTIVE = max(1, int(os.environ.get("MONTEUR_PUBLIC_MAX_ACTIVE", "3")))
+PUBLIC_MAX_UPLOADS = max(MAX_SOURCES, int(os.environ.get("MONTEUR_PUBLIC_MAX_UPLOADS", "24")))
 COOKIE_VALUE = hmac.new(API_TOKEN.encode(), b"monteur-session-v1", hashlib.sha256).hexdigest()
 DOWNLOAD_SECRET = hmac.new(API_TOKEN.encode(), b"monteur-download-v1", hashlib.sha256).digest()
 DOWNLOAD_TTL_SECONDS = 15 * 60
@@ -394,9 +395,9 @@ def begin_upload(data: UploadRequest):
         raise HTTPException(status_code=507, detail="Espace disque insuffisant")
     if PUBLIC_DEMO:
         with database() as con:
-            active = con.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('uploading','queued','processing')").fetchone()[0]
-        if active >= PUBLIC_MAX_ACTIVE:
-            raise HTTPException(status_code=429, detail="Service occupé, réessayer plus tard")
+            uploads = con.execute("SELECT COUNT(*) FROM jobs WHERE status='uploading'").fetchone()[0]
+        if uploads >= PUBLIC_MAX_UPLOADS:
+            raise HTTPException(status_code=429, detail="Trop de transferts en cours, réessayer plus tard")
     ident = str(uuid.uuid4())
     folder = ROOT / ident
     folder.mkdir(mode=0o700)
