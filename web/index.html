@@ -134,7 +134,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const DEFAULT_BACKEND = "https://monteur-video-hd.onrender.com";
+  const DEFAULT_BACKEND = ["localhost", "127.0.0.1"].includes(location.hostname) ? "" : "https://monteur-video-hd.onrender.com";
   const previousBackend = (localStorage.getItem("backendUrl") || "").replace(/\/$/, "");
   if(previousBackend === "https://monteur-video-beta.onrender.com") localStorage.removeItem("backendUrl");
   // Locally hosted installations and CI always use their own same-origin API.
