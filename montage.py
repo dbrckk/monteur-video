@@ -254,7 +254,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         source_seconds=sum(item["duration"] for item in info))
     grades = grade_plan(quality_cache, theme)
     budgets = allocation([item["duration"] for item in info], target_seconds)
-    order, sequence_strategy = chronological_order(\n        [Path(source) for source in sources], quality_cache, info)
+    order, sequence_strategy = chronological_order(
+        [Path(source) for source in sources], quality_cache, info)
     if progress:
         progress(0.32, "story")
     if len(sources) == 1:
@@ -274,7 +275,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         result["music_profile"] = music_profile
         result["color_grade"] = grades
         result["sequence_strategy"] = sequence_strategy
-        result["sequence_order"] = [0]\n        result["capture_timestamps"] = [info[0].get("captured_at")]
+        result["sequence_order"] = [0]
+        result["capture_timestamps"] = [info[0].get("captured_at")]
         result["sources"] = [{
             "index": 0, "name": source_names[0] if source_names else Path(sources[0]).name,
             "duration_seconds": round(info[0]["duration"], 2),
@@ -337,7 +339,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "music_profile": music_profile,
         "color_grade": grades,
         "sequence_strategy": sequence_strategy,
-        "sequence_order": order,\n        "capture_timestamps": [item.get("captured_at") for item in info],
+        "sequence_order": order,
+        "capture_timestamps": [item.get("captured_at") for item in info],
         "visual_analysis": ("motion_luminance_detail" if any(
             x["visual_analysis"] != "unavailable" for x in details) else "unavailable"),
         "sources": details,
