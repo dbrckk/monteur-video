@@ -6,6 +6,7 @@ import math
 import os
 import re
 import subprocess
+from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -105,6 +106,13 @@ def detect_silences(source: Path, duration: float, has_audio: bool) -> list[tupl
     return silence
 
 
+@lru_cache(maxsize=2)
+def load_whisper_model(model_name: str, device: str, compute_type: str):
+    """Reuse the heavy model across every rush in a montage (one render worker)."""
+    from faster_whisper import WhisperModel
+    return WhisperModel(model_name, device=device, compute_type=compute_type)
+
+
 def speech_to_text(source: Path, enabled: bool = True) -> tuple[list[dict], str]:
     if not enabled:
         return [], "disabled"
@@ -116,7 +124,7 @@ def speech_to_text(source: Path, enabled: bool = True) -> tuple[list[dict], str]
     device = os.environ.get("WHISPER_DEVICE", "cpu")
     compute_type = "float16" if device == "cuda" else "int8"
     try:
-        model = WhisperModel(model_name, device=device, compute_type=compute_type)
+        model = load_whisper_model(model_name, device, compute_type)
         segments, _ = model.transcribe(str(source), beam_size=3, vad_filter=True,
                                        word_timestamps=True)
         transcript = []
