@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate tunnel Compose and startup scripts
         run: |
-          bash -n scripts/start-free.sh
+          bash -n scripts/start-free.sh scripts/start-stable.sh
           docker compose -f compose.yaml -f compose.remote.yaml config --quiet
       - name: Build working FFmpeg engine container (light mode)
         run: docker build --build-arg INSTALL_WHISPER=0 -t monteur-v1:ci .
