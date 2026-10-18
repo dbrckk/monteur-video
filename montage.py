@@ -217,6 +217,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             "duration_seconds": round(duration["duration"], 2),
             "rendered_seconds": child["rendered_duration_seconds"],
             "speech_engine": child["speech_engine"],
+            "visual_analysis": child.get("visual_analysis", "unavailable"),
         })
     concat = work / "playlist.txt"
     concat.write_text("".join(f"file '{part.name}'\n" for part in rendered), encoding="utf-8")
@@ -233,6 +234,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "duration_mode": "auto" if auto_mode else "manual",
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
+        "visual_analysis": ("motion_luminance_detail" if any(
+            x["visual_analysis"] != "unavailable" for x in details) else "unavailable"),
         "sources": details,
         "clips": combined_clips,
         "captions_generated": bool(selected_speech),
