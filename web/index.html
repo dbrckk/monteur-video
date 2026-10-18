@@ -98,7 +98,7 @@
   <aside class="card">
     <h2>Le processus</h2>
     <div class="step"><span class="n">1</span><div><strong>Analyse des rushs</strong><p>Lecture de la vidéo, repérage des changements de plans et des passages parlés.</p></div></div>
-    <div class="step"><span class="n">2</span><div><strong>Fusion des meilleurs moments</strong><p>Chaque vidéo contribue au montage final, dans l’ordre de sélection, avec rythme et format 9:16 ou 16:9.</p></div></div>
+    <div class="step"><span class="n">2</span><div><strong>Fusion des meilleurs moments</strong><p>Analyse du mouvement et de la qualité des images : les vidéos sont réorganisées automatiquement pour un rythme progressif, indépendamment de l’ordre d’envoi.</p></div></div>
     <div class="step"><span class="n">3</span><div><strong>Finition audiovisuelle</strong><p>Encodage H.264, audio AAC, sous-titres si une transcription existe.</p></div></div>
     <div class="step"><span class="n">4</span><div><strong>Filtres et publication</strong><p>Après le rendu, sélection d’un look conseillé pour le thème, export MP4 final, description et hashtags.</p></div></div>
     <p class="muted">Les choix artistiques avancés, le suivi automatique du sujet et l'étalonnage cinématographique restent des évolutions à valider.</p>
@@ -146,7 +146,7 @@
   let pollFailures = 0;
   const isStatic = location.hostname.endsWith("github.io") || location.hostname.endsWith("shipstatic.com");
   if(isStatic && !API_BASE) { $("mobileHelp").textContent = "Site statique : renseigne d’abord l’adresse HTTPS du moteur de montage. GitHub Pages ne peut pas traiter les vidéos à lui seul."; }
-  const stages = {probe:"Vérification des médias",speech:"Transcription de la voix",scenes:"Détection des plans",silence:"Recherche des silences",render:"Encodage des séquences",queued:"En attente du moteur",done:"Montage terminé",failed:"Échec de production"};
+  const stages = {probe:"Vérification des médias",speech:"Analyse audio",scenes:"Repérage des scènes",quality:"Analyse du mouvement et de la netteté",story:"Construction du montage cohérent",highlights:"Sélection des moments forts",render:"Encodage HD des séquences",queued:"En attente du moteur",done:"Montage terminé",failed:"Échec de production"};
   function progress(p,label,message="") {
     $("statusCard").classList.add("active");
     $("stage").textContent = label;
@@ -500,7 +500,15 @@
       const job = await request("/api/jobs/" + encodeURIComponent(id));
       pollFailures = 0;
       const p = job.status === "done" ? 1 : .50 + .50 * Math.max(0,job.progress);
-      progress(p, stages[job.stage] || job.stage, job.status === "processing" ? "Traitement en cours sur le serveur…" : "");
+      const since = job.updated_at ? Date.now() - Date.parse(job.updated_at) : 0;
+      const waiting = job.status === "processing" && Number.isFinite(since) && since > 120000;
+      const infoText = waiting
+        ? "Analyse ou encodage exigeant : aucune nouvelle étape depuis " +
+          Math.floor(since / 60000) + " min. Le serveur travaille peut-être encore. Garde les fichiers originaux."
+        : job.status === "processing"
+          ? "Traitement en cours sur le serveur ; la progression suit les étapes réelles."
+          : "";
+      progress(p, stages[job.stage] || job.stage, infoText);
       if(job.expires_at) {
         const date = new Date(job.expires_at);
         $("retention").textContent = "Fichiers conservés jusqu’au " + date.toLocaleString("fr-FR")
@@ -536,7 +544,9 @@
         const captionsLabel = meta.captions_generated
           ? "Sous-titres issus de la transcription réelle de la voix."
           : "Sans transcription : aucun sous-titre ni tag vocal inventé.";
-        $("quality").textContent = durationLabel + modeLabel + analysisLabel + captionsLabel;
+        const narrativeLabel = meta.sequence_strategy === "energy_arc" && meta.source_count > 1
+          ? "Rushs organisés par intensité visuelle (introduction, montée, pic, conclusion). " : "";
+        $("quality").textContent = durationLabel + modeLabel + narrativeLabel + analysisLabel + captionsLabel;
         return;
       }
       pollTimer = setTimeout(() => poll(id), 2500);
