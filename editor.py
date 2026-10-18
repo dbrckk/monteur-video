@@ -341,6 +341,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                aspect: str = "vertical", target_seconds: int = 45,
                transcribe: bool = True, size: int = 1080,
                allow_short: bool = False,
+               detected_scenes: list[float] | None = None,
                progress: Callable[[float, str], None] | None = None) -> dict:
     if aspect not in {"vertical", "youtube"}:
         raise ValueError("Format inconnu.")
@@ -354,7 +355,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     transcript, asr_mode = speech_to_text(source, enabled=transcribe and info["has_audio"])
     if progress:
         progress(0.25, "scenes")
-    scenes = detect_scenes(source, info["duration"])
+    scenes = detected_scenes if detected_scenes is not None else detect_scenes(source, info["duration"])
     if progress:
         progress(0.32, "silence")
     silences = detect_silences(source, info["duration"], info["has_audio"])
