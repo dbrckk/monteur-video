@@ -17,7 +17,7 @@ from urllib.request import Request, urlopen
 
 SOURCE = "https://soundmatcha.com"
 CHARTS = {
-    "fitness": {"high": "/for/gym/", "medium": "/for/gym/", "low": "/mood/steady/"},
+    "fitness": {"high": "/for/gym/", "medium": "/for/gym/", "low": "/mood/smooth/"},
     "sport": {"high": "/mood/energetic/", "medium": "/for/gym/", "low": "/mood/energetic/"},
     "motivation": {"high": "/mood/powerful/", "medium": "/mood/cinematic/", "low": "/mood/cinematic/"},
     "lifestyle": {"high": "/mood/upbeat/", "medium": "/mood/warm/", "low": "/mood/warm/"},
