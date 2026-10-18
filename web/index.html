@@ -72,7 +72,7 @@
     </div>
     <label class="setting" for="seconds">Durée du montage (secondes)</label>
     <select id="seconds"><option value="30">30 s · Impact rapide</option><option value="45" selected>45 s · Reel conseillé</option><option value="60">60 s · Narration</option><option value="90">90 s · Plus détaillé</option><option value="180">180 s · Long extrait</option></select>
-    <label class="setting" for="token">Clé d'accès (uniquement si serveur protégé)</label>
+    <label class="setting" for="backend">Adresse HTTPS du moteur de montage</label><input id="backend" type="url" placeholder="https://api.example.com"><button type="button" class="copy" id="saveBackend" style="margin-top:10px">Enregistrer le moteur</button><label class="setting" for="token">Clé d'accès (uniquement si serveur protégé)</label>
     <input id="token" type="password" autocomplete="off" placeholder="Facultatif en local">
     <button id="start" class="btn">Créer mon montage →</button>
     <p class="muted">Traitement côté serveur. La transcription IA nécessite le module Whisper optionnel. Sans celui-ci, le montage utilise les plans et les silences sans inventer de sous-titres.</p>
@@ -105,7 +105,7 @@
 </main>
 <script>
 (() => {
-  const $ = id => document.getElementById(id);
+  const $ = id => document.getElementById(id); const API_BASE = (localStorage.getItem("backendUrl") || "").replace(/\/$/, ""); const apiPath = path => API_BASE + path;
   const drop = $("drop"), input = $("video"), button = $("start");
   let pollTimer;
   const stages = {probe:"Vérification des médias",speech:"Transcription de la voix",scenes:"Détection des plans",silence:"Recherche des silences",render:"Encodage des séquences",queued:"En attente du moteur",done:"Montage terminé",failed:"Échec de production"};
@@ -125,7 +125,7 @@
     button.textContent = "Réessayer →";
   }
   async function request(path, options={}) {
-    const response = await fetch(path, {credentials:"same-origin",...options});
+    const response = await fetch(apiPath(path), {credentials:API_BASE ? "include" : "same-origin",...options});
     if(!response.ok) {
       let description = response.statusText;
       try { const data = await response.json(); description = data.detail || description; } catch {}
@@ -190,7 +190,7 @@
         button.disabled = false;
         button.textContent = "Créer un autre montage →";
         localStorage.removeItem("lastJob");
-        const url = "/api/jobs/" + encodeURIComponent(id) + "/download";
+        const url = apiPath("/api/jobs/" + encodeURIComponent(id) + "/download");
         $("preview").style.display = "block";
         $("download").href = url;
         $("resultVideo").src = url;
@@ -227,7 +227,7 @@
     $("copy").textContent = "Copié ✓";
     setTimeout(()=>$("copy").textContent="Copier",1800);
   });
-  const previousJob = localStorage.getItem("lastJob");
+  $("backend").value = API_BASE; $("saveBackend").addEventListener("click",()=>{const v=$("backend").value.trim().replace(/\/$/,"");if(v && !/^https:\/\/[^/]+$/.test(v))return showError(new Error("Adresse HTTPS invalide"));if(v)localStorage.setItem("backendUrl",v);else localStorage.removeItem("backendUrl");location.reload();}); const previousJob = localStorage.getItem("lastJob");
   if(previousJob) poll(previousJob);
 })();
 </script>
