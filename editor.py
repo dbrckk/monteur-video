@@ -172,7 +172,9 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
         from visual_quality import usable_ranges
         ranges = usable_ranges(visual_samples, duration) or [(0.0, duration)]
     else:
-        ranges = active_ranges(duration, silences) or [(0.0, duration)]
+        # A silent workout may contain the best repetitions. Without visual
+        # evidence, audio silence is not grounds to discard the footage.
+        ranges = [(0.0, duration)]
     boundaries = sorted(scenes)
     candidates: list[Clip] = []
     for start, end in ranges:
