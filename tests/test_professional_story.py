@@ -60,6 +60,17 @@ class ChronologyTests(unittest.TestCase):
             self.assertEqual([sources[permutation[i]] for i in reordered[0]],
                              [sources[i] for i in expected])
 
+    def test_identical_camera_dates_do_not_imply_order(self):
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder) / f"{i}.mp4" for i in range(3)]
+            for i, path in enumerate(paths):
+                path.write_bytes(bytes([i+1]) * 100)
+            order, method = chronological_order(
+                paths, [samples(1), samples(8), samples(4)],
+                [{"captured_at":"2026-01-01T12:00:00+00:00"} for _ in paths])
+            self.assertEqual(method, "energy_arc_no_reliable_timestamps")
+            self.assertEqual(sorted(order), [0, 1, 2])
+
     def test_partial_dates_do_not_invent_camera_timeline(self):
         with tempfile.TemporaryDirectory() as folder:
             paths = [Path(folder) / f"{i}.mp4" for i in range(3)]
