@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "Monteur Studio",
+  "short_name": "Monteur",
+  "description": "Montage vidéo automatique pour Reels et Shorts",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c111b",
+  "theme_color": "#0c111b",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

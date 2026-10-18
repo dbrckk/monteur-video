@@ -4,7 +4,17 @@ Application web **locale** construite pour produire de vrais montages à partir 
 
 **État : première version bêta.** Ce moteur n'est pas encore un éditeur haut de gamme entièrement automatique. Le recadrage est centré et non intelligent ; la sélection des moments forts repose sur des heuristiques, et aucune musique ou effet visuel tiers n'est injecté sans droits. Les fonctions sont soumises à une CI qui tente un véritable encodage des deux formats.
 
-## Lancer avec Docker (recommandé)
+## Site web gratuit — Android / smartphone
+
+L'interface statique est prévue sur **https://dbrckk.github.io/monteur-video/** avec publication automatique par GitHub Pages, après activation de Pages dans les réglages du dépôt. Elle peut s'ajouter à l'écran d'accueil Android (PWA).
+
+**Parcours smartphone :** choisir la vidéo dans la galerie Android, envoyer le fichier par blocs reprenables, garder l'onglet ouvert durant l'envoi, puis le traitement continue côté serveur même après fermeture. L'application conserve le dernier montage pour retrouver le MP4 et le télécharger depuis le téléphone.
+
+L'interface seule ne peut pas produire le montage : il faut connecter par HTTPS un serveur personnel qui exécute FFmpeg et Whisper. Les requêtes depuis GitHub Pages sont autorisées par CORS explicite et nécessitent `APP_API_TOKEN` dans l'en-tête Authorization. Les téléchargements passent par un lien temporaire signé ; la clé API n'apparaît pas dans l'URL.
+
+Lire **[le guide d'hébergement statique et d'utilisation Android](docs/STATIC_HOSTING.md)** pour le fonctionnement, la sécurité et les limites (notamment : envoi non garanti lorsque l'onglet est fermé).
+
+
 
 Docker et Docker Compose sont installés sur l'ordinateur qui héberge l'application, pas sur le téléphone Android.
 
@@ -24,7 +34,7 @@ MAX_UPLOAD_GB=20
 WHISPER_MODEL=base
 ~~~
 
-La page web accepte cette clé et ouvre une session HttpOnly. Le moteur Whisper télécharge son modèle au premier usage si le cache est vide ; la rapidité dépend du CPU ou GPU, de la durée source et des capacités de téléchargement. L'image Docker utilise l'inférence CPU en int8 par défaut.
+La page web accepte cette clé et ouvre une session HttpOnly en local ; depuis GitHub Pages, elle utilise un jeton Bearer non sauvegardé sur le téléphone. Le moteur Whisper télécharge son modèle au premier usage si le cache est vide ; la rapidité dépend du CPU ou GPU, de la durée source et des capacités de téléchargement. L'image Docker utilise l'inférence CPU en int8 par défaut.
 
 ## Lancer sans Docker
 
@@ -45,7 +55,7 @@ Sous Windows activer l'environnement virtuel dans le dossier Scripts. Une instal
 2. PATCH /api/uploads/{id} reçoit des blocs de données brutes de 16 Mio maximum ; fournir l'en-tête Upload-Offset. En cas d'échec, GET /api/uploads/{id} permet de retrouver l'offset exact et de reprendre.
 3. POST /api/uploads/{id}/complete avec {"theme":"fitness","aspect":"vertical","seconds":45} lance la production. Thèmes : fitness, motivation, sport, lifestyle, auto. Formats : vertical ou youtube. Durée : 10 à 180 secondes.
 4. GET /api/jobs/{id} expose la progression, le moteur de transcription réellement utilisé, les clips sélectionnés, la description et les hashtags.
-5. GET /api/jobs/{id}/download récupère le MP4 ; DELETE /api/jobs/{id} supprime source et export une fois terminé.
+5. GET /api/jobs/{id}/download-link renvoie une URL MP4 signée valide pendant 15 minutes ; GET /api/jobs/{id}/download avec ce ticket télécharge le MP4 sans cookies tiers. DELETE /api/jobs/{id} supprime source et export une fois terminé.
 
 La durée d'entrée n'a pas de plafond artificiel. La taille maximale (20 Gio par défaut) dépend aussi de l'espace disque disponible. Les longues sources restent coûteuses à décoder et à transcrire. SQLite persiste les états ; les tâches mises en file reprennent après un redémarrage, tandis qu'une tâche interrompue en plein rendu passe en état échec. Un seul rendu s'exécute simultanément pour protéger la mémoire. Les fichiers source sont conservés tant que l'utilisateur ne les supprime pas.
 

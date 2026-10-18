@@ -12,9 +12,11 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from time import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -28,6 +30,14 @@ MAX_SIZE = int(float(os.environ.get("MAX_UPLOAD_GB", "20")) * 1024 ** 3)
 CHUNK_LIMIT = 16 * 1024 * 1024
 API_TOKEN = os.environ.get("APP_API_TOKEN", "")
 COOKIE_VALUE = hmac.new(API_TOKEN.encode(), b"monteur-session-v1", hashlib.sha256).hexdigest()
+DOWNLOAD_SECRET = hmac.new(API_TOKEN.encode(), b"monteur-download-v1", hashlib.sha256).digest()
+DOWNLOAD_TTL_SECONDS = 15 * 60
+CORS_ORIGINS = sorted(set(
+    ["https://dbrckk.github.io"] +
+    [origin.strip().rstrip("/") for origin in os.environ.get("MONTEUR_CORS_ORIGINS", "").split(",") if origin.strip()]
+))
+if any(not origin.startswith("https://") or "*" in origin for origin in CORS_ORIGINS):
+    raise RuntimeError("MONTEUR_CORS_ORIGINS must contain explicit HTTPS origins")
 POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="video-render")
 WRITE_LOCK = asyncio.Lock()
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"}
@@ -61,7 +71,14 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Monteur Video", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Monteur Video", version="0.2.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "Upload-Offset"],
+)
 
 
 class UploadRequest(BaseModel):
@@ -80,9 +97,42 @@ class ExportRequest(BaseModel):
 
 
 def authorize(request: Request) -> None:
-    if API_TOKEN and not hmac.compare_digest(
-            request.cookies.get("monteur_session", ""), COOKIE_VALUE):
-        raise HTTPException(status_code=401, detail="Authentification requise")
+    """Accept same-origin session cookies or bearer API tokens.
+
+    CORS never grants access to an untrusted origin; requests still require the secret.
+    """
+    if not API_TOKEN:
+        # Never permit the public static site to send cross-origin uploads
+        # to an accidentally unauthenticated local installation.
+        origin = request.headers.get("origin", "")
+        if origin and origin not in {"http://localhost:8000", "http://127.0.0.1:8000"}:
+            raise HTTPException(status_code=403, detail="Configurer APP_API_TOKEN pour l'accès distant")
+        return
+    bearer = request.headers.get("authorization", "")
+    candidate = bearer[7:] if bearer.startswith("Bearer ") else ""
+    if (hmac.compare_digest(candidate, API_TOKEN) or
+            hmac.compare_digest(request.cookies.get("monteur_session", ""), COOKIE_VALUE)):
+        return
+    raise HTTPException(status_code=401, detail="Authentification requise")
+
+
+def download_ticket(ident: str, expires: int) -> str:
+    message = f"{ident}:{expires}".encode()
+    return hmac.new(DOWNLOAD_SECRET, message, hashlib.sha256).hexdigest()
+
+
+def validate_ticket(ident: str, expires: str | None, signature: str | None) -> bool:
+    if not expires or not signature:
+        return False
+    try:
+        expiration = int(expires)
+    except (ValueError, TypeError):
+        return False
+    now = int(time())
+    if expiration < now or expiration > now + DOWNLOAD_TTL_SECONDS:
+        return False
+    return hmac.compare_digest(download_ticket(ident, expiration), signature)
+
 
 
 def get_job(ident: str) -> dict:
@@ -245,14 +295,31 @@ def job_status(ident: str):
             "metadata": json.loads(data["metadata"]) if data["metadata"] else None}
 
 
-@app.get("/api/jobs/{ident}/download", dependencies=[Depends(authorize)])
-def download_video(ident: str):
+@app.get("/api/jobs/{ident}/download-link", dependencies=[Depends(authorize)])
+def get_download_link(ident: str):
     job = get_job(ident)
+    if job["status"] != "done" or not (ROOT / job["id"] / "final.mp4").exists():
+        raise HTTPException(status_code=404, detail="Montage non disponible")
+    expires = int(time()) + DOWNLOAD_TTL_SECONDS
+    token = download_ticket(job["id"], expires)
+    return {"url": f"/api/jobs/{job['id']}/download?expires={expires}&ticket={token}",
+            "expires_in": DOWNLOAD_TTL_SECONDS}
+
+
+@app.get("/api/jobs/{ident}/download")
+def download_video(ident: str, request: Request, expires: str | None = None,
+                   ticket: str | None = None, inline: bool = False):
+    job = get_job(ident)
+    if not validate_ticket(job["id"], expires, ticket):
+        authorize(request)
     destination = ROOT / job["id"] / "final.mp4"
     if job["status"] != "done" or not destination.exists():
         raise HTTPException(status_code=404, detail="Montage non disponible")
     return FileResponse(destination, media_type="video/mp4",
-                        filename=f"montage-{ident[:8]}.mp4")
+                        filename=f"montage-{ident[:8]}.mp4",
+                        content_disposition_type="inline" if inline else "attachment",
+                        headers={"Cache-Control": "private, no-store",
+                                 "Referrer-Policy": "no-referrer"})
 
 
 @app.delete("/api/jobs/{ident}", dependencies=[Depends(authorize)])
