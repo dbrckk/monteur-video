@@ -551,6 +551,31 @@
       pollTimer = setTimeout(() => poll(id), Math.min(30000, 2500 * 2 ** Math.min(pollFailures, 4)));
     }
   }
+  async function createMontage() {
+    await login();
+    const batch = loadBatch(selectedFiles);
+    const totalSize = selectedFiles.reduce((sum,file)=>sum+file.size,0);
+    let precedingBytes = 0;
+    const ids = [];
+    for(let i=0;i<selectedFiles.length;i++) {
+      const file = selectedFiles[i];
+      ids.push(await upload(file, i, batch, totalSize, precedingBytes));
+      precedingBytes += file.size;
+    }
+    progress(.5, "Tous les rushs envoyés", "Lancement du montage commun");
+    const job = await request("/api/montages", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        project_id:batch.id, upload_ids:ids,
+        theme:$("theme").value, aspect:$("aspect").value,
+        seconds:Number($("seconds").value)
+      })});
+    localStorage.setItem("lastJob",JSON.stringify({id:job.id,origin:API_BASE}));
+    $("resumeJob").style.display = "block";
+    localStorage.removeItem("ongoingUploads");
+    localStorage.removeItem("ongoingMontage");
+    await poll(job.id);
+  }
   button.addEventListener("click",async()=>{
     $("retryRender").style.display = "none";
     $("retention").textContent = "";
