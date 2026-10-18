@@ -27,6 +27,47 @@ TRACKS = {
 SOUND_LEVELS = {"mute": 0.0, "low": 0.20, "auto": 0.0}
 
 
+def select_music_profile(theme: str, samples: list, *,
+                         scene_count: int = 0, source_seconds: float = 0) -> dict:
+    """Match music to measured visual energy, not just the chosen category.
+
+    Only deterministic, non-biometric FFmpeg signals are used. Scores do not
+    claim knowledge of depicted people, emotion, or exercise type.
+    """
+    preset = TRACKS.get(theme, TRACKS["auto"])
+    visible = [x for x in samples
+               if 25 <= x.luminance <= 230 and x.detail >= 2]
+    if not visible:
+        return {"bpm": preset["bpm"], "title": preset["name"],
+                "style": preset["style"], "root": preset["root"],
+                "energy": "medium", "motion_score": None,
+                "scene_rate": None, "selection_method": "theme_fallback"}
+    motion = sorted(max(0.0, min(24.0, x.motion)) for x in visible)
+    active_motion = motion[int(0.75 * (len(motion) - 1))]
+    scene_rate = (60.0 * scene_count / source_seconds
+                  if source_seconds > 0 else 0.0)
+    visual_energy = min(1.0, active_motion / 12)
+    cutting_energy = min(1.0, scene_rate / 22)
+    combined = 0.77 * visual_energy + 0.23 * cutting_energy
+    if combined >= 0.65:
+        energy = "high"
+        bpm = 154 if theme in {"sport", "fitness"} else 144
+        name, style = "Peak Momentum", "high-energy workout / bass"
+    elif combined >= 0.32:
+        energy = "medium"
+        bpm = 136 if theme in {"sport", "fitness"} else 124
+        name, style = "Forward Motion", "pulsing training / electronic"
+    else:
+        energy = "low"
+        bpm = 108 if theme in {"lifestyle", "motivation"} else 120
+        name, style = "Steady Focus", "minimal groove / warm-up"
+    return {"bpm": bpm, "title": name, "style": style,
+            "root": preset["root"], "energy": energy,
+            "motion_score": round(active_motion, 2),
+            "scene_rate": round(scene_rate, 2),
+            "selection_method": "visual_motion_scene_density"}
+
+
 def beat_duration(theme: str) -> float:
     return 60.0 / TRACKS.get(theme, TRACKS["auto"])["bpm"]
 
