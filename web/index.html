@@ -132,7 +132,7 @@
 </main>
 <script>
 (() => {
-  const $ = id => document.getElementById(id); const API_BASE = (localStorage.getItem("backendUrl") || "https://monteur-video-beta.onrender.com").replace(/\/$/, ""); const apiPath = path => API_BASE + path;
+  const $ = id => document.getElementById(id); const API_BASE = (localStorage.getItem("backendUrl") || "https://monteur-video-hd.onrender.com").replace(/\/$/, ""); const apiPath = path => API_BASE + path;
   const drop = $("drop"), input = $("video"), button = $("start");
   let pollTimer;
   let pollFailures = 0;
@@ -173,7 +173,7 @@
   }
   async function login() {
     if(API_BASE) {
-      if(!$("token").value && !API_BASE.includes("monteur-video-beta.onrender.com")) throw new Error("Renseigne la clé d’accès du moteur HTTPS.");
+      if(!$("token").value && !API_BASE.includes("monteur-video-hd.onrender.com")) throw new Error("Renseigne la clé d’accès du moteur HTTPS.");
       return request("/api/session");
     }
     return request("/api/login", {method:"POST",headers:{"Content-Type":"application/json"},
@@ -559,7 +559,7 @@
     setTimeout(()=>$("copy").textContent="Copier",1800);
   });
   $("backend").value = API_BASE;
-  if(API_BASE && !API_BASE.includes("monteur-video-beta.onrender.com")) { $("token").hidden = false; $("tokenLabel").hidden = false; }
+  if(API_BASE && !API_BASE.includes("monteur-video-hd.onrender.com")) { $("token").hidden = false; $("tokenLabel").hidden = false; }
   $("saveBackend").addEventListener("click",()=>{
     const v = $("backend").value.trim().replace(/\/$/,"");
     if(v && !/^https:\/\/[^/]+$/.test(v)) return showError(new Error("Adresse HTTPS invalide"));
