@@ -98,11 +98,16 @@ class ExportRequest(BaseModel):
 
 
 def authorize(request: Request) -> None:
-    """Accept same-origin session cookies or short-lived client-supplied API tokens.
+    """Accept same-origin session cookies or bearer API tokens.
 
     CORS never grants access to an untrusted origin; requests still require the secret.
     """
     if not API_TOKEN:
+        # Never permit the public static site to send cross-origin uploads
+        # to an accidentally unauthenticated local installation.
+        origin = request.headers.get("origin", "")
+        if origin and origin not in {"http://localhost:8000", "http://127.0.0.1:8000"}:
+            raise HTTPException(status_code=403, detail="Configurer APP_API_TOKEN pour l'accès distant")
         return
     bearer = request.headers.get("authorization", "")
     candidate = bearer[7:] if bearer.startswith("Bearer ") else ""
@@ -304,7 +309,7 @@ def get_download_link(ident: str):
 
 @app.get("/api/jobs/{ident}/download")
 def download_video(ident: str, request: Request, expires: str | None = None,
-                   ticket: str | None = None):
+                   ticket: str | None = None, inline: bool = False):
     job = get_job(ident)
     if not validate_ticket(job["id"], expires, ticket):
         authorize(request)
@@ -312,7 +317,10 @@ def download_video(ident: str, request: Request, expires: str | None = None,
     if job["status"] != "done" or not destination.exists():
         raise HTTPException(status_code=404, detail="Montage non disponible")
     return FileResponse(destination, media_type="video/mp4",
-                        filename=f"montage-{ident[:8]}.mp4")
+                        filename=f"montage-{ident[:8]}.mp4",
+                        content_disposition_type="inline" if inline else "attachment",
+                        headers={"Cache-Control": "private, no-store",
+                                 "Referrer-Policy": "no-referrer"})
 
 
 @app.delete("/api/jobs/{ident}", dependencies=[Depends(authorize)])
