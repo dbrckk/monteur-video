@@ -134,7 +134,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const DEFAULT_BACKEND = "https://monteur-video-hd.onrender.com";
+  const DEFAULT_BACKEND = ["localhost", "127.0.0.1"].includes(location.hostname) ? "" : "https://monteur-video-hd.onrender.com";
   const previousBackend = (localStorage.getItem("backendUrl") || "").replace(/\/$/, "");
   if(previousBackend === "https://monteur-video-beta.onrender.com") localStorage.removeItem("backendUrl");
   const API_BASE = (localStorage.getItem("backendUrl") || DEFAULT_BACKEND).replace(/\/$/, "");
