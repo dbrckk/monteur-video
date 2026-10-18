@@ -1,6 +1,9 @@
 services:
   monteur:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_WHISPER: ${INSTALL_WHISPER:-1}
     restart: unless-stopped
     ports:
       - "127.0.0.1:8000:8000"
@@ -10,9 +13,13 @@ services:
       APP_API_TOKEN: ${APP_API_TOKEN:-}
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
       WHISPER_DEVICE: cpu
+      UPLOAD_TTL_HOURS: ${UPLOAD_TTL_HOURS:-72}
+      RESULT_TTL_DAYS: ${RESULT_TTL_DAYS:-14}
     volumes:
       - montages:/data
+    security_opt:
+      - no-new-privileges:true
     init: true
-    stop_grace_period: 30s
+    stop_grace_period: 90s
 volumes:
   montages:
