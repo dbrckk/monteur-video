@@ -550,6 +550,7 @@ def job_status(ident: str):
         expires_at = (stamp + timedelta(days=RESULT_TTL_DAYS)).isoformat()
     return {"id": data["id"], "filename": data["filename"],
             "status": data["status"], "stage": data["stage"],
+            "created_at": data["created_at"], "updated_at": data["updated_at"],
             "progress": data["progress"], "error": data["error"],
             "expires_at": expires_at,
             "metadata": json.loads(data["metadata"]) if data["metadata"] else None}
