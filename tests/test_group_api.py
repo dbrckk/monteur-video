@@ -131,6 +131,18 @@ class MultiVideoApiTests(unittest.TestCase):
                 self.assertEqual(client.get(original.json()["url"] + "&inline=1").headers[
                     "content-disposition"].split(";")[0], "inline")
 
+    def test_local_server_serves_mobile_pwa_assets(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
+            "EDITOR_DATA_DIR": tmp, "APP_API_TOKEN": ""}):
+            import server
+            server = importlib.reload(server)
+            with TestClient(server.app) as client:
+                for path in ("/", "/manifest.webmanifest", "/icon.svg", "/sw.js"):
+                    response = client.get(path)
+                    self.assertEqual(response.status_code, 200, path)
+                self.assertEqual(client.get("/manifest.webmanifest").json()["display"],
+                                 "standalone")
+
     def test_montage_partial_upload_rejected(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
             "EDITOR_DATA_DIR": tmp, "APP_API_TOKEN": ""}):
