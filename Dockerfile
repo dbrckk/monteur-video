@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certi
 WORKDIR /app
 COPY requirements-ai.txt requirements.txt ./
 RUN pip install --no-cache-dir -r requirements-ai.txt
-COPY editor.py server.py ./
+COPY editor.py montage.py server.py ./
 COPY web/ ./web/
 RUN useradd -m -u 10001 appuser && mkdir -p /data && chown appuser:appuser /data
 USER appuser
