@@ -10,6 +10,7 @@ import html
 import math
 import re
 import time
+import unicodedata
 from functools import lru_cache
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
@@ -99,13 +100,59 @@ class _ChartParser(HTMLParser):
             self.current = None
 
 
+def _slug(value: str) -> str:
+    value = unicodedata.normalize("NFKD", value)
+    value = "".join(c for c in value if not unicodedata.combining(c)).lower()
+    return re.sub(r"[^a-z0-9]+", "-", value).strip("-")
+
+
 def parse_chart(page: str) -> list[dict]:
+    """Parse both card-style links and the site's free-to-quote ranked list.
+
+    On some SoundMatcha themes the cover image and the title link are separate
+    HTML nodes. Parsing only the card's <a> text loses the artist; the chart's
+    final plain-text ranked list supplies both fields reliably.
+    """
     parser = _ChartParser()
     parser.feed(page)
-    unique: dict[str, dict] = {}
+    indexed: dict[str, dict] = {}
     for item in parser.items:
-        unique.setdefault(item["source_url"], item)
-    return list(unique.values())[:50]
+        indexed.setdefault(item["source_url"], item)
+    # This site's plain-text weekly list is designed for citation and contains
+    # a structured title/artist/usage pair for each ranked track.
+    links = list(dict.fromkeys(re.findall(
+        r'href=["\'](https://soundmatcha\.com/sound/[^"\']+|/sound/[^"\']+)["\']',
+        page, flags=re.I)))
+    sound_links = [urljoin(SOURCE, href) for href in links]
+    footer = re.finditer(
+        r"<li[^>]*>\s*(\d{1,3})\.\s*<b[^>]*>(.*?)</b>\s*—\s*(.*?):\s*"
+        r"<b[^>]*>[\d.,KM]+</b>\s*Reels\s*</li>",
+        page, re.I | re.S)
+    listed: list[dict] = []
+    for match in footer:
+        rank = int(match.group(1))
+        if rank < 1 or rank > 100:
+            continue
+        title = html.unescape(re.sub(r"<[^>]+>", "", match.group(2))).strip()
+        artist = html.unescape(re.sub(r"<[^>]+>", "", match.group(3))).strip()
+        if not title or not artist:
+            continue
+        slug = _slug(title)
+        match_url = next(
+            (href for href in sound_links
+             if urlparse(href).path.startswith("/sound/" + slug + "-")
+             or urlparse(href).path == "/sound/" + slug + "/"),
+            None)
+        if match_url is None and rank <= len(sound_links):
+            match_url = sound_links[rank - 1]
+        if match_url and urlparse(match_url).netloc == "soundmatcha.com":
+            listed.append({"title": title[:160], "artist": artist[:140],
+                           "source_url": match_url, "rank": rank,
+                           "vocals": "instrumental" if "instrumental" in title.lower()
+                                     else "unknown"})
+    if len(listed) >= 3:
+        return listed[:50]
+    return list(indexed.values())[:50]
 
 
 @lru_cache(maxsize=24)
