@@ -86,7 +86,7 @@ class MultiRenderTests(unittest.TestCase):
             self.assertEqual(len(meta["sources"]), 2)
             self.assertEqual(set(x["source_index"] for x in meta["clips"]), {0, 1})
             self.assertEqual(sorted(meta["sequence_order"]), [0, 1])
-            self.assertEqual(meta["sequence_strategy"], "energy_arc_no_reliable_timestamps")
+            self.assertEqual(meta["sequence_strategy"], "visual_continuity_no_reliable_timestamps")
             self.assertGreater(meta["rendered_duration_seconds"], 4.0)
             self.assertLessEqual(meta["rendered_duration_seconds"], 7.0)
             self.assertNotIn("squat", meta["hashtags"])
