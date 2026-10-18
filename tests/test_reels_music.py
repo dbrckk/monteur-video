@@ -36,6 +36,28 @@ class ChartParserTests(unittest.TestCase):
         self.assertTrue(all(t["source_url"].startswith(reels_music.SOURCE + "/sound/")
                             for t in tracks))
 
+    def test_actual_chart_structure_separate_image_and_plain_text_rankings(self):
+        page = """
+        <div><a href="/sound/raindance-dave-tems/">Raindance</a>
+        <p>Dave &amp; Tems</p></div>
+        <div><a href="/sound/thunderstruck-ac-dc/">Thunderstruck</a>
+        <p>AC/DC</p></div>
+        <div><a href="/sound/fe-n-feat-playboi-carti-travis-scott/">FE!N</a>
+        <p>Travis Scott</p></div>
+        <ul>
+        <li>1. <b>Raindance</b> — Dave &amp; Tems: <b>2M</b> Reels</li>
+        <li>2. <b>Thunderstruck</b> — AC/DC: <b>282K</b> Reels</li>
+        <li>3. <b>FE!N (feat. Playboi Carti)</b> — Travis Scott: <b>571K</b> Reels</li>
+        </ul>
+        """
+        results = reels_music.parse_chart(page)
+        self.assertEqual(len(results), 3)
+        self.assertEqual(results[0]["artist"], "Dave & Tems")
+        self.assertEqual(results[1]["title"], "Thunderstruck")
+        self.assertEqual(results[2]["artist"], "Travis Scott")
+        self.assertEqual(results[2]["rank"], 3)
+        self.assertIn("fe-n-feat-playboi-carti", results[2]["source_url"])
+
     def test_live_chart_selects_matching_high_energy_audio(self):
         def fetch(url):
             if "/sound/fein-track/" in url:
