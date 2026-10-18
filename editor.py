@@ -371,7 +371,8 @@ def create_captions(path: Path, clip: Clip, transcript: list[dict], vertical: bo
 
 def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
            transcript: list[dict], vertical: bool, has_audio: bool,
-           size: int = 1080, progress: Callable[[float, str], None] | None = None) -> None:
+           size: int = 1080, progress: Callable[[float, str], None] | None = None,
+           grade_filter: str | None = None) -> None:
     if not clips:
         raise ValueError("Aucun passage utilisable.")
     work = destination.parent / "segments"
@@ -384,6 +385,8 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
         part = work / f"{i:04}.mp4"
         scaling = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
                    f"crop={w}:{h},setsar=1")
+        if grade_filter:
+            scaling += "," + grade_filter
         ass = work / f"{i:04}.ass"
         if create_captions(ass, clip, transcript, vertical):
             # Segments are named with UUID parent / numeric basename: safe for FFmpeg quoting.
@@ -422,6 +425,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                detected_scenes: list[float] | None = None,
                visual_samples: list | None = None,
                music_profile: dict | None = None,
+               grade_filter: str | None = None,
                progress: Callable[[float, str], None] | None = None) -> dict:
     if aspect not in {"vertical", "youtube"}:
         raise ValueError("Format inconnu.")
@@ -443,6 +447,9 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     if visual_samples is None:
         from visual_quality import analyze_visual
         visual_samples = analyze_visual(source, duration=info["duration"])
+    if grade_filter is None:
+        from color_grade import grade_plan
+        grade_filter = grade_plan([visual_samples or []], theme)["source_grades"][0]["filter"]
     from soundtrack import beat_duration
     beat_grid = (60.0 / music_profile["bpm"] if music_profile else beat_duration(theme)) if theme in {"fitness", "sport"} else None
     clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
@@ -459,12 +466,14 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                      "scene_count": len(scenes),
                      "visual_analysis": "motion_luminance_detail" if visual_samples else "unavailable",
                      "cut_style": "beat_synced" if beat_grid else "editorial",
+                     "auto_color_grading": bool(grade_filter),
                      "clips": [{"start": c.start, "end": c.end, "score": round(c.score, 2)}
                                for c in clips]})
     if progress:
         progress(0.40, "render")
     render(source, destination, clips, metadata, selected_speech,
-           aspect == "vertical", info["has_audio"], size, progress)
+           aspect == "vertical", info["has_audio"], size, progress,
+           grade_filter=grade_filter)
     if progress:
         progress(1.0, "done")
     return metadata
