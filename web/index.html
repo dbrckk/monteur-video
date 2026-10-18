@@ -178,8 +178,10 @@
     }
     let current = await request("/api/uploads/" + session.id);
     if(current.status !== "uploading") {
-      localStorage.removeItem("ongoingUpload");
-      throw new Error("Ce transfert est déjà terminé.");
+      if(["queued","processing","done","failed"].includes(current.status)) {
+        return {id:session.id,alreadyStarted:true};
+      }
+      throw new Error("État de transfert inconnu : " + current.status);
     }
     let offset = current.offset, attempts = 0;
     while(offset < file.size) {
@@ -197,8 +199,9 @@
       }
       progress(offset / file.size * .5, "Transfert des rushs", (offset/1024**3).toFixed(2) + " / " + (file.size/1024**3).toFixed(2) + " Go");
     }
-    localStorage.removeItem("ongoingUpload");
-    return session.id;
+    // Keep the session until /complete succeeds: closing Chrome at the
+    // end of an upload must not strand an unstarted job.
+    return {id:session.id,alreadyStarted:false};
   }
   async function poll(id) {
     clearTimeout(pollTimer);
@@ -238,12 +241,16 @@
     try {
       await login();
       progress(0,"Initialisation du transfert");
-      const id = await upload(file);
-      await request("/api/uploads/" + id + "/complete",{method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({theme:$("theme").value,aspect:$("aspect").value,seconds:Number($("seconds").value)})});
+      const transfer = await upload(file);
+      const id = transfer.id;
       localStorage.setItem("lastJob",JSON.stringify({id,origin:API_BASE}));
       $("resumeJob").style.display="block";
+      if(!transfer.alreadyStarted) {
+        await request("/api/uploads/" + id + "/complete",{method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({theme:$("theme").value,aspect:$("aspect").value,seconds:Number($("seconds").value)})});
+      }
+      localStorage.removeItem("ongoingUpload");
       await poll(id);
     }catch(error){showError(error);}
   });
