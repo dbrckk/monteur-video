@@ -660,7 +660,7 @@ def download_video(ident: str, request: Request, expires: str | None = None,
     if job["status"] != "done" or not destination.exists():
         raise HTTPException(status_code=404, detail="Montage non disponible")
     return FileResponse(destination, media_type="video/mp4",
-                        filename=f"montage-{ident[:8]}.mp4",
+                        filename=f"montage-{job['id'][:8]}-{preset}.mp4",
                         content_disposition_type="inline" if inline else "attachment",
                         headers={"Cache-Control": "private, no-store",
                                  "Referrer-Policy": "no-referrer"})
