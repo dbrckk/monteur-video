@@ -145,6 +145,7 @@
     $("percent").textContent = Math.round(p * 100) + " %";
     $("progress").style.width = (Math.max(0, Math.min(1, p)) * 100) + "%";
     $("message").textContent = message;
+    $("message").className = "muted";
   }
   function showError(error) {
     $("statusCard").classList.add("active");
