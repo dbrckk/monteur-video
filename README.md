@@ -56,6 +56,12 @@ Le mode **Musique originale intégrée au MP4** demeure disponible et produit un
 
 Source : https://soundmatcha.com/for/gym/ — classement public à citer par lien. Conditions musicales de Meta : https://www.facebook.com/help/instagram/402084904469945 . Contrat CapCut : https://www.capcut.com/clause/material-license-agreement .
 
+## Analyse des articulations — module expérimental optionnel
+
+Le moteur peut, sur une infrastructure disposant d'une version **MediaPipe Solutions Pose** compatible et de NumPy, examiner au plus 24 images basse résolution réparties sur les rushes et rechercher des changements visibles d'angle aux genoux. Activer explicitement `MONTEUR_ENABLE_POSE=1` **uniquement après installation et validation du runtime ML**. Par défaut, cette fonction est désactivée afin de préserver la compatibilité du serveur gratuit : le montage continue avec ses indicateurs de mouvement classiques.
+
+Lorsque les articulations sont masquées, que le signal est trop faible ou que les échantillons sont espacés, aucune conclusion n'est produite. Les angles peuvent signaler une flexion-extension visible, **pas identifier avec certitude un squat**, évaluer une technique ni compter des répétitions d'exercice. Les métadonnées distinguent explicitement les analyses mesurées, indisponibles ou désactivées.
+
 ## Chronologie de tournage et étalonnage automatique
 
 Le moteur utilise les métadonnées de **date/heure de capture** de FFprobe et QuickTime (fuseau horaire compris) pour reconstruire la séquence réelle, **quel que soit l'ordre d'import des fichiers**. Les clips internes à chaque rush restent temporellement ordonnés. Lorsque les informations de capture sont manquantes ou non comparables, le système évite les dates de modification trompeuses : il revient à une progression visuelle déterministe introduction → effort → pic → conclusion. Cette solution ne prétend pas deviner l'ordre réel d'événements impossibles à distinguer visuellement sans dates de capture.
