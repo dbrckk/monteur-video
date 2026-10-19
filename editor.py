@@ -202,7 +202,8 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
                allow_short: bool = False,
                visual_samples: list | None = None,
                beat_seconds: float | None = None,
-               action_bouts: list[dict] | None = None) -> list[Clip]:
+               action_bouts: list[dict] | None = None,
+               motion_cadence: list[dict] | None = None) -> list[Clip]:
     """Select highlights across the entire recording, respecting pauses and visual cuts.
 
     Stratified buckets prevent a long, low-dialogue video from collapsing into its
@@ -254,6 +255,9 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
             if action_bouts:
                 from action_story import candidate_action_score
                 score += candidate_action_score(cursor, stop, action_bouts)
+            if motion_cadence:
+                from action_story import candidate_cadence_score
+                score += candidate_cadence_score(cursor, stop, motion_cadence)
             candidates.append(Clip(round(cursor, 3), round(stop, 3), score))
             cursor = stop
     if not candidates:
@@ -467,7 +471,8 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
                        allow_short=allow_short, visual_samples=visual_samples,
                        beat_seconds=beat_grid,
-                       action_bouts=action_story["action_bouts"])
+                       action_bouts=action_story["action_bouts"],
+                       motion_cadence=action_story["possible_motion_cadence"])
     from action_story import narrative_coverage
     action_story["selected_coverage"] = narrative_coverage(clips, action_story["timeline_phases"])
     from color_grade import adaptive_shot_filters
