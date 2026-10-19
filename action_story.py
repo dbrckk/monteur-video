@@ -131,6 +131,63 @@ def motion_cadence(samples: list, bouts: list[dict]) -> list[dict]:
     return results
 
 
+def short_complete_action_intervals(bouts: list[dict],
+                                    ranges: list[tuple[float, float]],
+                                    scene_boundaries: list[float],
+                                    max_span: float) -> list[tuple[float, float]]:
+    """Return only measured action intervals safe to preserve as complete shots.
+
+    A protected highlight never bridges unknown visual sampling, crosses
+    an independently detected scene cut, or exceeds the intended shot budget.
+    Long sustained action is deliberately left to the ordinary editor.
+    """
+    if not math.isfinite(max_span) or max_span < 1.8:
+        return []
+    candidates: set[tuple[float, float]] = set()
+    for bout in bouts:
+        if bout.get("kind") != "observed_motion_bout":
+            continue
+        start, end = bout.get("start"), bout.get("end")
+        confidence = bout.get("confidence", 0)
+        if (not all(isinstance(v, (float, int)) and not isinstance(v, bool)
+                    and math.isfinite(v) for v in (start, end, confidence))
+                or confidence < 0.55 or not 1.25 <= end - start <= max_span - 0.30):
+            continue
+        for left, right in ranges:
+            if left <= start and end <= right:
+                # Small handles show the onset and completion of motion.
+                clip_start = max(left, start - 0.22)
+                clip_end = min(right, end + 0.22)
+                if (clip_end - clip_start > max_span + 0.0001
+                        or any(clip_start + 0.15 < t < clip_end - 0.15
+                               for t in scene_boundaries)):
+                    break
+                candidates.add((round(clip_start, 3), round(clip_end, 3)))
+                break
+    return sorted(candidates)
+
+
+def completed_action_coverage(clips: list, bouts: list[dict]) -> dict:
+    """Count only measured *motion intervals* contained within one final clip.
+
+    This does not infer completed exercise repetitions or technique. Partial
+    snippets cannot masquerade as preserved full action intervals.
+    """
+    verified = [b for b in bouts
+                if b.get("kind") == "observed_motion_bout"
+                and isinstance(b.get("start"), (float, int))
+                and isinstance(b.get("end"), (float, int))
+                and math.isfinite(b["start"]) and math.isfinite(b["end"])
+                and b["end"] > b["start"]]
+    protected = sum(any(c.start <= b["start"] + 0.015
+                        and c.end >= b["end"] - 0.015 for c in clips)
+                    for b in verified)
+    return {"observed_motion_bouts": len(verified),
+            "whole_bouts_in_export": protected,
+            "whole_bout_ratio": round(protected / len(verified), 3) if verified else None,
+            "not_exercise_repetition_count": True}
+
+
 def candidate_cadence_score(start: float, end: float,
                             cadence: list[dict]) -> float:
     """Small bounded highlight bonus for repeated *visual* movement.
