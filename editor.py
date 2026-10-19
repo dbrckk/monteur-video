@@ -462,6 +462,8 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     beat_grid = (60.0 / music_profile["bpm"] if music_profile else beat_duration(theme)) if theme in {"fitness", "sport"} else None
     from action_story import narrative_signals
     action_story = narrative_signals(visual_samples or [], transcript, info["duration"])
+    from pose_evidence import analyze_pose
+    action_story["pose_evidence"] = analyze_pose(source, info["duration"])
     clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
                        allow_short=allow_short, visual_samples=visual_samples,
                        beat_seconds=beat_grid,
