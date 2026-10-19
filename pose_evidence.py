@@ -103,10 +103,12 @@ def analyze_pose(source: Path, duration: float) -> dict:
         from editor import analysis_windows
         if not hasattr(mp, "solutions") or not hasattr(mp.solutions, "pose"):
             return {"status": "unavailable", "reason": "mediapipe_solutions_unavailable"}
-        points: list[tuple[float, float]] = []
+        evidence_by_window = []
+        valid_frames = 0
         with mp.solutions.pose.Pose(static_image_mode=True, model_complexity=0,
                                      min_detection_confidence=0.65) as pose:
             for start, length in analysis_windows(duration):
+                points: list[tuple[float, float]] = []
                 for time, data in _decode_frames(source, start, length):
                     img = np.frombuffer(data, dtype=np.uint8).reshape((HEIGHT, WIDTH, 3))
                     result = pose.process(img)
@@ -115,9 +117,16 @@ def analyze_pose(source: Path, duration: float) -> dict:
                     angles = knee_angles(result.pose_landmarks.landmark)
                     if angles:
                         points.append((time, median(angles)))
-        evidence = knee_flexion_evidence(points)
-        return {"status": "measured", "method": "mediapipe_visible_knee_angles",
-                "valid_frames": len(points), **evidence}
+                        valid_frames += 1
+                # Do not merge time-disconnected sampling windows into a
+                # fictional continuous human movement.
+                evidence_by_window.append(knee_flexion_evidence(points))
+        detected = [item for item in evidence_by_window if item["detected"]]
+        evidence = max(detected, key=lambda item: item["confidence"]) if detected else {
+            "detected": False, "reason": "no_confident_joint_flexion"}
+        return {"status": "measured" if valid_frames else "insufficient_evidence",
+                "method": "mediapipe_visible_knee_angles",
+                "valid_frames": valid_frames, **evidence}
     except (ImportError, FileNotFoundError):
         return {"status": "unavailable", "reason": "optional_pose_runtime_missing"}
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
