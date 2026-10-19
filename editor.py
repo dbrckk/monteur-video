@@ -43,6 +43,7 @@ class Clip:
     start: float
     end: float
     score: float
+    preserves_action: bool = False
 
     @property
     def duration(self) -> float:
@@ -260,6 +261,22 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
                 score += candidate_cadence_score(cursor, stop, motion_cadence)
             candidates.append(Clip(round(cursor, 3), round(stop, 3), score))
             cursor = stop
+    if action_bouts:
+        from action_story import (short_complete_action_intervals,
+                                  candidate_action_score, candidate_cadence_score)
+        protected = short_complete_action_intervals(action_bouts, ranges, boundaries, clip_span)
+        for clip_start, clip_end in protected:
+            quality_bonus = 0.0
+            if visual_samples:
+                from visual_quality import clip_quality
+                quality_bonus, unusable = clip_quality(visual_samples, clip_start, clip_end)
+                if unusable:
+                    continue
+            # Select full short movements, not attractive but incomplete snippets.
+            score = (3.0 + quality_bonus
+                     + candidate_action_score(clip_start, clip_end, action_bouts)
+                     + candidate_cadence_score(clip_start, clip_end, motion_cadence or []))
+            candidates.append(Clip(clip_start, clip_end, round(score, 3), True))
     if not candidates:
         # Never export the entire rush when the requested highlight is short.
         return [Clip(0.0, min(duration, float(target_seconds)), 1.0)]
@@ -285,8 +302,11 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
         if remaining < 1.0 or any(candidate.start < c.end and candidate.end > c.start
                                   for c in selected):
             return
+        # A protected observed movement may only be included in full.
+        if candidate.preserves_action and candidate.duration > remaining + 0.0001:
+            return
         length = min(candidate.duration, remaining)
-        if beat_seconds and length >= 4 * beat_seconds:
+        if not candidate.preserves_action and beat_seconds and length >= 4 * beat_seconds:
             # Prefer four-beat measures, or two beats for shorter actions.
             quantized = math.floor((length + 0.02) / (4 * beat_seconds)) * 4 * beat_seconds
             if quantized < 1.0:
@@ -295,7 +315,7 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
                 length = min(length, quantized)
         if length >= 1.0:
             selected.append(Clip(candidate.start, round(candidate.start + length, 3),
-                                 candidate.score))
+                                 candidate.score, candidate.preserves_action))
             remaining -= length
 
     for representative in sorted(representatives, key=lambda c: (-c.score, c.start)):
@@ -473,8 +493,9 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                        beat_seconds=beat_grid,
                        action_bouts=action_story["action_bouts"],
                        motion_cadence=action_story["possible_motion_cadence"])
-    from action_story import narrative_coverage
+    from action_story import narrative_coverage, completed_action_coverage
     action_story["selected_coverage"] = narrative_coverage(clips, action_story["timeline_phases"])
+    action_story["whole_action_coverage"] = completed_action_coverage(clips, action_story["action_bouts"])
     from color_grade import adaptive_shot_filters
     shot_filters = adaptive_shot_filters(visual_samples or [], clips, theme,
                                         shared_grade=color_reference,
@@ -489,6 +510,7 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                      "selected_transcript": selected_speech,
                      "scene_count": len(scenes),
                      "action_story": action_story,
+                     "action_quality": action_story["whole_action_coverage"],
                      "visual_analysis": "motion_luminance_detail" if visual_samples else "unavailable",
                      "cut_style": "beat_synced" if beat_grid else "editorial",
                      "auto_color_grading": any(bool(v) for v in shot_filters),

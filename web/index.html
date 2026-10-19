@@ -621,6 +621,9 @@
           ? "Chronologie non vérifiable : ordre estimé par progression visuelle. " : "";
         const colorLabel = meta.color_grade?.source_grades?.some(g => g.measured)
           ? "Étalonnage adaptatif : exposition et couleurs harmonisées plan par plan. " : "";
+        const actionLabel = meta.action_quality?.observed_motion_bouts > 0
+          ? `${meta.action_quality.whole_bouts_in_export} passage(s) de mouvement mesuré préservé(s) intégralement sur ${meta.action_quality.observed_motion_bouts} détecté(s). Ce n'est pas un comptage de répétitions. `
+          : "";
         const soundtrack = meta.soundtrack || {};
         const match = meta.music_profile || {};
         const matched = match.selection_method === "visual_motion_scene_density"
@@ -636,7 +639,7 @@
             " — " + meta.reels_music.selected.artist +
             ". À ajouter dans Instagram pour bénéficier de sa bibliothèque musicale. "
           : "";
-        $("quality").textContent = durationLabel + modeLabel + narrativeLabel + colorLabel + musicLabel + instagramLabel + analysisLabel + captionsLabel;
+        $("quality").textContent = durationLabel + modeLabel + narrativeLabel + colorLabel + actionLabel + musicLabel + instagramLabel + analysisLabel + captionsLabel;
         return;
       }
       pollTimer = setTimeout(() => poll(id), 2500);

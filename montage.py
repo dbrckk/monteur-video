@@ -413,6 +413,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             "duration_seconds": round(duration["duration"], 2),
             "rendered_seconds": child["rendered_duration_seconds"],
             "speech_engine": child["speech_engine"],
+            "action_quality": child.get("action_quality", {}),
             "visual_analysis": child.get("visual_analysis", "unavailable"),
             "captured_at": duration.get("captured_at"),
             "color_grade": grades["source_grades"][index]["correction"],
@@ -426,12 +427,24 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
     if progress:
         progress(0.98, "render")
     output = social_metadata(theme, selected_speech, sum(x["duration"] for x in info))
+    measured_actions = sum(d["action_quality"].get("observed_motion_bouts", 0)
+                           for d in details)
+    preserved_actions = sum(d["action_quality"].get("whole_bouts_in_export", 0)
+                            for d in details)
+    action_quality = {
+        "observed_motion_bouts": measured_actions,
+        "whole_bouts_in_export": preserved_actions,
+        "whole_bout_ratio": (round(preserved_actions / measured_actions, 3)
+                             if measured_actions else None),
+        "not_exercise_repetition_count": True,
+    }
     output.update({
         "aspect": aspect,
         "target_duration_seconds": target_seconds,
         "duration_mode": "auto" if auto_mode else "manual",
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
+        "action_quality": action_quality,
         "music_profile": music_profile,
         "color_grade": grades,
         "sequence_strategy": sequence_strategy,

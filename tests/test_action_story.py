@@ -1,6 +1,6 @@
 import unittest
 from dataclasses import dataclass
-from action_story import action_phases, candidate_action_score, narrative_signals, speech_exercise, timeline_phases, narrative_coverage, motion_cadence, candidate_cadence_score
+from action_story import action_phases, candidate_action_score, narrative_signals, speech_exercise, timeline_phases, narrative_coverage, motion_cadence, candidate_cadence_score, short_complete_action_intervals, completed_action_coverage
 from editor import plan_clips
 
 
@@ -100,6 +100,49 @@ class ActionUnderstandingTests(unittest.TestCase):
         self.assertTrue(improved)
         self.assertGreaterEqual(max(c.score for c in improved),
                                 max(c.score for c in baseline))
+
+    def test_short_action_kept_whole_instead_of_mid_motion_cut(self):
+        from editor import Clip
+        bout = {"start": 4.0, "end": 6.5, "confidence": .76,
+                "kind": "observed_motion_bout"}
+        seq = [S(i * .5, 5) for i in range(28)]
+        clips = plan_clips(14, [], [], [], 5, allow_short=True,
+                           visual_samples=seq, beat_seconds=.5, action_bouts=[bout])
+        self.assertTrue(any(c.preserves_action for c in clips))
+        self.assertTrue(any(c.start <= 4.0 and c.end >= 6.5 for c in clips))
+        self.assertLessEqual(sum(c.duration for c in clips), 5.001)
+        self.assertEqual(clips, sorted(clips, key=lambda c: c.start))
+        self.assertEqual(completed_action_coverage(clips, [bout])["whole_bouts_in_export"], 1)
+
+    def test_protected_action_is_never_partially_trimmed_for_short_budget(self):
+        bout = {"start": 4.0, "end": 6.5, "confidence": .76,
+                "kind": "observed_motion_bout"}
+        seq = [S(i * .5, 5) for i in range(28)]
+        clips = plan_clips(14, [], [], [], 2, allow_short=True,
+                           visual_samples=seq, beat_seconds=.5, action_bouts=[bout])
+        self.assertTrue(clips)
+        self.assertFalse(any(c.preserves_action for c in clips))
+        self.assertLessEqual(sum(c.duration for c in clips), 2.001)
+
+    def test_protection_never_crosses_a_real_scene_cut_or_unknown_gap(self):
+        bout = {"start": 4.0, "end": 6.5, "confidence": .76,
+                "kind": "observed_motion_bout"}
+        self.assertEqual(short_complete_action_intervals([bout],
+                          [(0, 12)], [5.0], 4.0), [])
+        self.assertEqual(short_complete_action_intervals([bout],
+                          [(0, 4.5), (5.0, 12)], [], 4.0), [])
+        self.assertEqual(short_complete_action_intervals(
+                          [{**bout, "end": 10}], [(0, 12)], [], 4), [])
+
+    def test_only_measured_motion_is_counted_as_complete(self):
+        from editor import Clip
+        bout = {"start": 4.0, "end": 6.5, "confidence": .76,
+                "kind": "observed_motion_bout"}
+        partial = completed_action_coverage([Clip(4.5, 6, 3)], [bout])
+        self.assertEqual(partial["observed_motion_bouts"], 1)
+        self.assertEqual(partial["whole_bouts_in_export"], 0)
+        self.assertTrue(partial["not_exercise_repetition_count"])
+        self.assertIsNone(completed_action_coverage([], [])["whole_bout_ratio"])
 
     def test_plan_clips_still_respects_chronological_order(self):
         clips = plan_clips(12, [], [], [], target_seconds=5, allow_short=True,
