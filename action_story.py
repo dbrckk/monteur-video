@@ -131,6 +131,32 @@ def motion_cadence(samples: list, bouts: list[dict]) -> list[dict]:
     return results
 
 
+def candidate_cadence_score(start: float, end: float,
+                            cadence: list[dict]) -> float:
+    """Small bounded highlight bonus for repeated *visual* movement.
+
+    Do not overrule image quality, visual continuity, or chronology. A cycle
+    score is only awarded when at least 60% of the clip overlaps a verified
+    periodic visual segment; it is never an exercise repetition estimate.
+    """
+    if not math.isfinite(start) or not math.isfinite(end) or end <= start:
+        return 0.0
+    best = 0.0
+    for item in cadence:
+        if item.get("kind") != "possible_periodic_visual_motion":
+            continue
+        confidence = item.get("confidence", 0.0)
+        if not isinstance(confidence, (int, float)) or not math.isfinite(confidence):
+            continue
+        if confidence < 0.3:
+            continue
+        overlap = max(0.0, min(end, item["end"]) - max(start, item["start"]))
+        fraction = overlap / (end - start)
+        if fraction >= 0.6:
+            best = max(best, fraction * min(0.65, confidence) * 1.25)
+    return round(min(0.8, best), 3)
+
+
 def candidate_action_score(start: float, end: float, bouts: list[dict]) -> float:
     if end <= start:
         return 0.0

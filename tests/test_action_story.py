@@ -1,6 +1,6 @@
 import unittest
 from dataclasses import dataclass
-from action_story import action_phases, candidate_action_score, narrative_signals, speech_exercise, timeline_phases, narrative_coverage, motion_cadence
+from action_story import action_phases, candidate_action_score, narrative_signals, speech_exercise, timeline_phases, narrative_coverage, motion_cadence, candidate_cadence_score
 from editor import plan_clips
 
 
@@ -78,6 +78,28 @@ class ActionUnderstandingTests(unittest.TestCase):
         self.assertEqual(motion_cadence(flat, [{"start": 0, "end": 15}]), [])
         discontinuous = [S(i * 2.0, 14 if i % 2 else 4) for i in range(12)]
         self.assertEqual(motion_cadence(discontinuous, [{"start": 0, "end": 24}]), [])
+
+    def test_cadence_bonus_only_for_confident_overlap(self):
+        cadence = [{"start": 4, "end": 10, "confidence": .65,
+                    "kind": "possible_periodic_visual_motion"}]
+        self.assertGreater(candidate_cadence_score(5, 9, cadence), 0)
+        self.assertEqual(candidate_cadence_score(0, 3, cadence), 0)
+        self.assertEqual(candidate_cadence_score(0, 6, cadence), 0)
+        self.assertLessEqual(candidate_cadence_score(5, 9, cadence), .8)
+
+    def test_editor_uses_cadence_without_reordering_clips(self):
+        seq = [S(i * .5, 5) for i in range(24)]
+        cadence = [{"start": 6, "end": 10, "confidence": .65,
+                    "kind": "possible_periodic_visual_motion"}]
+        baseline = plan_clips(12, [], [], [], target_seconds=5,
+                              allow_short=True, visual_samples=seq)
+        improved = plan_clips(12, [], [], [], target_seconds=5,
+                              allow_short=True, visual_samples=seq,
+                              motion_cadence=cadence)
+        self.assertTrue(all(a.start <= b.start for a,b in zip(improved, improved[1:])))
+        self.assertTrue(improved)
+        self.assertGreaterEqual(max(c.score for c in improved),
+                                max(c.score for c in baseline))
 
     def test_plan_clips_still_respects_chronological_order(self):
         clips = plan_clips(12, [], [], [], target_seconds=5, allow_short=True,
