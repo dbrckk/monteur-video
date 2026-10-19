@@ -189,6 +189,52 @@ def narrative_order(sources: Sequence[Path], samples: Sequence[list]) -> list[in
     return [ranked[0], *ranked[2:], ranked[1]]
 
 
+def continuity_story_order(sources: Sequence[Path], samples: Sequence[list]) -> list[int]:
+    """Improve neighboring shot continuity without claiming event chronology.
+
+    Maintain the established energy-arc opening and closing. Within the middle
+    section, greedily prefer adjacent shots with similar measured illumination
+    and chroma while penalizing large reversals in motion energy. This is an
+    aesthetic sequencing heuristic, not semantic exercise recognition.
+    """
+    base = narrative_order(sources, samples)
+    if len(base) < 5:
+        return base
+    def signature(index: int):
+        valid = [x for x in samples[index] if 30 <= x.luminance <= 224
+                 and x.detail >= 2]
+        if len(valid) < 3:
+            return None
+        from statistics import median
+        return (median(x.luminance for x in valid),
+                median(x.chroma_u for x in valid),
+                median(x.chroma_v for x in valid),
+                median(x.motion for x in valid))
+    features = {i: signature(i) for i in base}
+    if sum(v is not None for v in features.values()) < 4:
+        return base
+    first, last = base[0], base[-1]
+    remaining = list(base[1:-1])
+    result = [first]
+    rank = {index: pos for pos, index in enumerate(base)}
+    while remaining:
+        previous = features[result[-1]]
+        def cost(index):
+            current = features[index]
+            if previous is None or current is None:
+                return (10000 + rank[index], rank[index])
+            exposure = abs(previous[0] - current[0]) / 32
+            chroma = (abs(previous[1] - current[1]) +
+                      abs(previous[2] - current[2])) / 16
+            motion = max(0, previous[3] - current[3]) / 3
+            arc = abs(rank[index] - len(result)) * 0.9
+            return (exposure + chroma + motion + arc, rank[index])
+        chosen = min(remaining, key=cost)
+        result.append(chosen)
+        remaining.remove(chosen)
+    return [*result, last]
+
+
 def _filename_capture_time(name: str) -> str | None:
     """Use only explicit camera timestamp filenames; never file upload/modification time.
 
@@ -250,7 +296,7 @@ def chronological_order(sources: Sequence[Path], samples: Sequence[list],
             assembled.append(anchor)
         assembled.extend(slots[-1])
         return assembled, "capture_anchors_visual_gaps"
-    return narrative_order(sources, samples), "energy_arc_no_reliable_timestamps"
+    return continuity_story_order(sources, samples), "visual_continuity_no_reliable_timestamps"
 
 def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitness",
               aspect: str = "vertical", target_seconds: int = 45,
