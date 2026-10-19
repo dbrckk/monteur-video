@@ -466,6 +466,8 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
                        allow_short=allow_short, visual_samples=visual_samples,
                        beat_seconds=beat_grid,
                        action_bouts=action_story["action_bouts"])
+    from action_story import narrative_coverage
+    action_story["selected_coverage"] = narrative_coverage(clips, action_story["timeline_phases"])
     from color_grade import adaptive_shot_filters
     shot_filters = adaptive_shot_filters(visual_samples or [], clips, theme,
                                         shared_grade=color_reference,

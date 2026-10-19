@@ -89,12 +89,66 @@ def candidate_action_score(start: float, end: float, bouts: list[dict]) -> float
     return round(2.2 * min(1.0, overlap / max(1.0, end-start)), 3)
 
 
+def timeline_phases(samples: list, duration: float,
+                    bouts: list[dict] | None = None) -> list[dict]:
+    """Evidence-grounded preparation / effort / recovery intervals.
+
+    Labels refer to relative observed motion, NOT human intent or pose.
+    Do not bridge long sampling gaps or label unsampled regions.
+    """
+    if not math.isfinite(duration) or duration <= 0:
+        return []
+    bouts = action_phases(samples, duration) if bouts is None else bouts
+    if not bouts:
+        return []
+    ordered = sorted(bouts, key=lambda b: b["start"])
+    result = []
+    first = ordered[0]["start"]
+    if first >= 1:
+        result.append({"start": 0.0, "end": round(first, 2),
+                       "phase": "before_observed_effort",
+                       "confidence": 0.35, "evidence": "relative_timing_only"})
+    for i, bout in enumerate(ordered):
+        result.append({"start": bout["start"], "end": bout["end"],
+                       "phase": "observed_effort",
+                       "confidence": bout["confidence"],
+                       "evidence": "sustained_visual_motion"})
+        if i + 1 < len(ordered):
+            next_start = ordered[i + 1]["start"]
+            if next_start - bout["end"] >= 1:
+                result.append({"start": bout["end"], "end": next_start,
+                               "phase": "between_efforts",
+                               "confidence": 0.35,
+                               "evidence": "relative_timing_only"})
+    last = ordered[-1]["end"]
+    if duration - last >= 1:
+        result.append({"start": last, "end": round(duration, 2),
+                       "phase": "after_observed_effort",
+                       "confidence": 0.35, "evidence": "relative_timing_only"})
+    return result
+
+
+def narrative_coverage(clips: list, phases: list[dict]) -> dict:
+    """Audit how much selected footage overlaps measured effort intervals."""
+    total = sum(max(0, clip.end - clip.start) for clip in clips)
+    observed = [p for p in phases if p["phase"] == "observed_effort"]
+    overlap = sum(max(0.0, min(clip.end, p["end"]) -
+                      max(clip.start, p["start"]))
+                  for clip in clips for p in observed)
+    return {"selected_seconds": round(total, 2),
+            "observed_effort_seconds": round(overlap, 2),
+            "observed_effort_ratio": round(min(1, overlap / total), 3) if total else 0.0,
+            "phase_detection": "motion_proxy_not_pose_recognition"}
+
+
 def narrative_signals(samples: list, transcript: list[dict], duration: float) -> dict:
     phases = action_phases(samples, duration)
     explicit = speech_exercise(transcript)
+    timeline = timeline_phases(samples, duration, phases)
     return {
         "method": "motion_bouts_and_explicit_speech",
         "action_bouts": phases,
+        "timeline_phases": timeline,
         "exercise": explicit["exercise"],
         "exercise_evidence": explicit["source"],
         "exercise_confidence": explicit["confidence"],

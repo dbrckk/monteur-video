@@ -1,6 +1,6 @@
 import unittest
 from dataclasses import dataclass
-from action_story import action_phases, candidate_action_score, narrative_signals, speech_exercise
+from action_story import action_phases, candidate_action_score, narrative_signals, speech_exercise, timeline_phases, narrative_coverage
 from editor import plan_clips
 
 
@@ -45,6 +45,24 @@ class ActionUnderstandingTests(unittest.TestCase):
         signal = narrative_signals([S(i*.5, 2) for i in range(16)], [], 8)
         self.assertFalse(signal["actual_pose_or_repetition_recognition"])
         self.assertIsNone(signal["exercise"])
+
+    def test_action_phase_timeline_and_coverage_are_grounded(self):
+        seq = [S(i*.5, 1 if i < 6 or i >= 13 else 12) for i in range(24)]
+        story = narrative_signals(seq, [], 12)
+        phases = story["timeline_phases"]
+        self.assertEqual([p["phase"] for p in phases],
+                         ["before_observed_effort", "observed_effort",
+                          "after_observed_effort"])
+        self.assertTrue(all(p["end"] > p["start"] for p in phases))
+        self.assertTrue(all(p["evidence"] != "pose_recognition" for p in phases))
+        from editor import Clip
+        coverage = narrative_coverage([Clip(3, 7, 1)], phases)
+        self.assertGreater(coverage["observed_effort_ratio"], 0.5)
+        self.assertLessEqual(coverage["observed_effort_ratio"], 1.0)
+
+    def test_no_evidence_means_no_phase_invention(self):
+        self.assertEqual(timeline_phases([], 20), [])
+        self.assertEqual(narrative_coverage([], [])["observed_effort_ratio"], 0)
 
     def test_plan_clips_still_respects_chronological_order(self):
         clips = plan_clips(12, [], [], [], target_seconds=5, allow_short=True,
