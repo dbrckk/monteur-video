@@ -1,6 +1,6 @@
 import unittest
 from dataclasses import dataclass
-from action_story import action_phases, candidate_action_score, narrative_signals, speech_exercise, timeline_phases, narrative_coverage
+from action_story import action_phases, candidate_action_score, narrative_signals, speech_exercise, timeline_phases, narrative_coverage, motion_cadence
 from editor import plan_clips
 
 
@@ -63,6 +63,21 @@ class ActionUnderstandingTests(unittest.TestCase):
     def test_no_evidence_means_no_phase_invention(self):
         self.assertEqual(timeline_phases([], 20), [])
         self.assertEqual(narrative_coverage([], [])["observed_effort_ratio"], 0)
+
+    def test_periodic_visual_motion_without_fabricated_repetition_count(self):
+        seq = [S(i * .5, 14 if i % 4 == 2 else 5) for i in range(38)]
+        found = motion_cadence(seq, [{"start": 0.0, "end": 19.0}])
+        self.assertEqual(len(found), 1)
+        self.assertAlmostEqual(found[0]["visual_cycle_seconds"], 2.0, places=1)
+        self.assertTrue(found[0]["not_exercise_rep_count"])
+        self.assertNotIn("repetitions", found[0])
+        self.assertLessEqual(found[0]["confidence"], 0.65)
+
+    def test_cadence_rejects_sparse_and_unconvincing_motion(self):
+        flat = [S(i * .5, 8) for i in range(30)]
+        self.assertEqual(motion_cadence(flat, [{"start": 0, "end": 15}]), [])
+        discontinuous = [S(i * 2.0, 14 if i % 2 else 4) for i in range(12)]
+        self.assertEqual(motion_cadence(discontinuous, [{"start": 0, "end": 24}]), [])
 
     def test_plan_clips_still_respects_chronological_order(self):
         clips = plan_clips(12, [], [], [], target_seconds=5, allow_short=True,
