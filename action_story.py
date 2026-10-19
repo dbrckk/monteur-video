@@ -81,6 +81,56 @@ def action_phases(samples: list, duration: float) -> list[dict]:
     return bouts
 
 
+def motion_cadence(samples: list, bouts: list[dict]) -> list[dict]:
+    """Detect a repeat-like visual cadence, not completed exercise repetitions.
+
+    Motion is camera-sensitive and low-rate (2 FPS). A peak may reflect
+    camera shake, transitions or equipment movement. Reject sparse gaps and
+    too-short or irregular sequences; never report a repetition count.
+    """
+    results = []
+    ordered = sorted(samples, key=lambda x: x.time)
+    for bout in bouts:
+        frames = [x for x in ordered
+                  if bout["start"] <= x.time < bout["end"]
+                  and math.isfinite(x.time) and math.isfinite(x.motion)
+                  and 22 <= x.luminance <= 231 and x.detail >= 2]
+        if len(frames) < 10 or any(
+                not 0.3 <= b.time - a.time <= 0.7
+                for a, b in zip(frames, frames[1:])):
+            continue
+        values = [max(0.0, x.motion) for x in frames]
+        floor = median(values)
+        amplitude = max(values) - min(values)
+        if amplitude < max(2.0, floor * 0.30):
+            continue
+        threshold = floor + 0.18 * amplitude
+        peaks = []
+        for i in range(1, len(frames) - 1):
+            if (values[i] > threshold and values[i] > values[i-1]
+                    and values[i] >= values[i+1]
+                    and (not peaks or frames[i].time - peaks[-1] >= 0.8)):
+                peaks.append(frames[i].time)
+        if len(peaks) < 3:
+            continue
+        intervals = [b - a for a, b in zip(peaks, peaks[1:])]
+        spacing = median(intervals)
+        if not 0.8 <= spacing <= 8.0:
+            continue
+        regularity = median(abs(x - spacing) for x in intervals) / spacing
+        if regularity > 0.25:
+            continue
+        results.append({
+            "start": bout["start"], "end": bout["end"],
+            "visual_cycle_seconds": round(spacing, 2),
+            "regularity": round(max(0.0, 1.0 - regularity), 2),
+            "confidence": round(min(0.65, 0.30 + 0.05 * len(intervals)), 2),
+            "kind": "possible_periodic_visual_motion",
+            "not_exercise_rep_count": True,
+        })
+    return results
+
+
 def candidate_action_score(start: float, end: float, bouts: list[dict]) -> float:
     if end <= start:
         return 0.0
@@ -145,10 +195,12 @@ def narrative_signals(samples: list, transcript: list[dict], duration: float) ->
     phases = action_phases(samples, duration)
     explicit = speech_exercise(transcript)
     timeline = timeline_phases(samples, duration, phases)
+    cadence = motion_cadence(samples, phases)
     return {
         "method": "motion_bouts_and_explicit_speech",
         "action_bouts": phases,
         "timeline_phases": timeline,
+        "possible_motion_cadence": cadence,
         "exercise": explicit["exercise"],
         "exercise_evidence": explicit["source"],
         "exercise_confidence": explicit["confidence"],
