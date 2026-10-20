@@ -70,7 +70,17 @@ def probe_media(source: Path) -> dict:
     video = next((s for s in info.get("streams", []) if s["codec_type"] == "video"), None)
     if video is None:
         raise ValueError("Le fichier ne contient aucune piste vidéo.")
-    duration = float(info.get("format", {}).get("duration") or video.get("duration") or 0)
+    # Container length can follow a microphone track that outlives the video.
+    # Always plan cuts against the actual picture timeline when it is known.
+    duration = 0.0
+    for candidate in (video.get("duration"), info.get("format", {}).get("duration")):
+        try:
+            seconds = float(candidate)
+        except (ValueError, TypeError):
+            continue
+        if math.isfinite(seconds) and seconds > 0:
+            duration = seconds
+            break
     if not math.isfinite(duration) or duration < 0.5:
         raise ValueError("Durée vidéo invalide ou insuffisante.")
     # Prefer camera capture metadata over upload time or Android filesystem times.
@@ -425,9 +435,12 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
                    "-ss", str(clip.start), "-i", str(source)]
         if not has_audio:
             command += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
-        # Brief fade at every cut limits audible clicks in mixed microphone /
-        # background-audio rushes without adding unlicensed music.
-        audio_fade = (f"afade=t=in:st=0:d=0.06,"
+        # Phone microphones sometimes stop before the video track. Without
+        # padding, -shortest silently truncates the picture at the audio EOF.
+        # Preserve the requested clip length and fill only missing audio with silence.
+        audio_fade = (f"apad=whole_dur={clip.duration:.3f},"
+                      f"atrim=duration={clip.duration:.3f},"
+                      f"afade=t=in:st=0:d=0.06,"
                       f"afade=t=out:st={max(0.06, clip.duration - 0.08):.3f}:d=0.08")
         command += ["-t", str(clip.duration), "-map", "0:v:0",
                     "-map", "0:a:0" if has_audio else "1:a:0",
