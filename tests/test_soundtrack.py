@@ -1,10 +1,12 @@
 """Music is entirely original; final MP4 must have clear rhythmic audio."""
 import math
+import array
 import shutil
 import subprocess
 import tempfile
 import unittest
 import wave
+from unittest.mock import patch
 from pathlib import Path
 
 from soundtrack import SOUND_LEVELS, TRACKS, add_soundtrack, beat_duration, create_original_beat, prepare_instagram_reel
@@ -69,6 +71,73 @@ class MixFFmpegTests(unittest.TestCase):
                     self.assertEqual(codec, "aac")
                     self.assertFalse(list(work.glob("*.partial.mp4")))
                     self.assertFalse(list(work.glob("*.original-beat.wav")))
+
+    def test_duck_generated_music_during_source_sound_and_recover_after(self):
+        """Real FFmpeg mix must reduce beat level during microphone activity."""
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            source = work / "voice.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=15:duration=3",
+                "-f", "lavfi", "-i",
+                "sine=frequency=900:sample_rate=48000:duration=1",
+                "-c:v", "mpeg4", "-q:v", "6", "-c:a", "aac", str(source),
+            ], check=True, capture_output=True)
+
+            def tone_beat(theme, destination, music_profile=None):
+                subprocess.run([
+                    "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+                    "-f", "lavfi", "-i",
+                    "sine=frequency=440:sample_rate=22050:duration=3",
+                    "-c:a", "pcm_s16le", str(destination)
+                ], check=True, capture_output=True)
+                return {"title": "Measurement Tone", "bpm": 120,
+                        "origin": "original_generated"}
+
+            with patch("soundtrack.create_original_beat", side_effect=tone_beat):
+                result = add_soundtrack(source, "fitness", sound_mode="low")
+            self.assertTrue(result["dynamic_source_ducking"])
+            self.assertEqual(result["original_audio_volume"], 0.2)
+            decoded = subprocess.check_output([
+                "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error",
+                "-i", str(source), "-vn", "-ac", "1", "-ar", "48000",
+                "-f", "f32le", "pipe:1"])
+            pcm = array.array("f")
+            pcm.frombytes(decoded)
+            rate = 48000
+
+            def tone_strength(start: float, end: float) -> float:
+                section = pcm[round(start * rate):round(end * rate)]
+                cos = sum(sample * math.cos(2 * math.pi * 440 * i / rate)
+                          for i, sample in enumerate(section))
+                sin = sum(sample * math.sin(2 * math.pi * 440 * i / rate)
+                          for i, sample in enumerate(section))
+                return 2 * math.hypot(cos, sin) / len(section)
+
+            under_microphone = tone_strength(0.4, 0.8)
+            after_microphone = tone_strength(1.5, 1.9)
+            self.assertGreater(after_microphone, 0.02)
+            self.assertLess(under_microphone, after_microphone * 0.75)
+            self.assertAlmostEqual(probe_media(source)["duration"], 3, delta=0.15)
+
+    def test_silent_video_can_receive_original_music(self):
+        """A video with no audio stream still exports a valid soundtrack."""
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root) / "silent.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=15:duration=2.1",
+                "-c:v", "mpeg4", "-q:v", "6", str(source)
+            ], check=True, capture_output=True)
+            self.assertFalse(probe_media(source)["has_audio"])
+            result = add_soundtrack(source, "fitness", sound_mode="low")
+            self.assertFalse(result["dynamic_source_ducking"])
+            self.assertEqual(result["original_audio_volume"], 0)
+            info = probe_media(source)
+            self.assertTrue(info["has_audio"])
+            self.assertAlmostEqual(info["duration"], 2.1, delta=0.15)
+            self.assertFalse(list(Path(root).glob("*.partial.mp4")))
 
     def test_instagram_mode_removes_source_audio_without_embedding_a_commercial_track(self):
         with tempfile.TemporaryDirectory() as root:
