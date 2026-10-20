@@ -34,6 +34,8 @@ Sur smartphone, le son du fichier source est réglable :
 - **Couper** : son d'origine à **0 %**.
 - **20 %** : conserver légèrement la voix et les bruits de la séance en fond de musique.
 
+Lorsque le son capté par le micro est conservé à 20 %, le niveau de la musique originale baisse automatiquement pendant les passages sonores (compression dynamique sidechain FFmpeg), puis remonte progressivement. Ce mécanisme se base sur l'énergie réelle du micro, pas sur une reconnaissance fiable de la parole : une ambiance bruyante peut également provoquer l'atténuation. En absence de piste audio, une musique originale est quand même ajoutée, sans troncature ni piste son fictive attribuée à la source. Le mix final dispose d'un limiteur de crête.
+
 Les clips de sport et musculation sont réduits à des phrases de **8 temps environ**, avec une préférence pour les durées multiples de **4 temps** et des coupes franches calées sur le tempo du morceau généré. La musique reste continue pendant tout le montage, même si les rushs changent d'ordre, et les coupes audio sources bénéficient de fondus très courts.
 
 Ces instrumentaux originaux fournissent une solution utilisable gratuitement et sans clé, mais ne prétendent pas être des musiques populaires sous licence TikTok ni un catalogue professionnel produit par des artistes. Sans Whisper, l'option automatique ne peut pas déterminer si la voix est intéressante : elle privilégie donc la musique seule. Les métadonnées d'export indiquent la musique, le BPM, sa provenance et le niveau de son source réellement utilisé.
