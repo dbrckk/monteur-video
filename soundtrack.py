@@ -176,6 +176,33 @@ def create_original_beat(theme: str, destination: Path, bars: int = 8,
             "loop_seconds": round(length, 3)}
 
 
+def _original_music_mix(duration: float, original_volume: float) -> tuple[str, float]:
+    """FFmpeg graph with measured-source sidechain ducking and bounded output.
+
+    The sidechain responds only to actual microphone energy; it does not claim
+    speech recognition. Pad the key and source to video duration so an early
+    microphone EOF cannot truncate the music or picture.
+    """
+    fade_start = max(0.0, duration - 0.65)
+    music_volume = 0.72 if original_volume > 0 else 0.88
+    beat = (f"[1:a]aresample=48000,volume={music_volume:.2f},"
+            f"atrim=duration={duration:.3f},asetpts=PTS-STARTPTS,"
+            f"afade=t=in:st=0:d=0.18,"
+            f"afade=t=out:st={fade_start:.3f}:d=0.65")
+    if original_volume <= 0:
+        return beat + ",alimiter=limit=0.93[out]", music_volume
+    graph = (f"[0:a]aresample=48000,apad=whole_dur={duration:.3f},"
+             f"atrim=duration={duration:.3f},asetpts=PTS-STARTPTS,"
+             "asplit=2[key][ambient_source];"
+             f"[ambient_source]volume={original_volume:.2f}[ambient];"
+             + beat + "[beat];"
+             "[beat][key]sidechaincompress="
+             "threshold=0.035:ratio=6:attack=22:release=260:detection=rms[ducked];"
+             "[ambient][ducked]amix=inputs=2:duration=longest:normalize=0,"
+             "alimiter=limit=0.93[out]")
+    return graph, music_volume
+
+
 def add_soundtrack(video: Path, theme: str, *, sound_mode: str = "auto",
                    voice_present: bool = False,
                    music_profile: dict | None = None,
@@ -190,7 +217,8 @@ def add_soundtrack(video: Path, theme: str, *, sound_mode: str = "auto",
     if not video.exists():
         raise FileNotFoundError("Montage vidéo absent")
     master_info = probe_media(video)
-    original_volume = (0.2 if voice_present else 0.0) if sound_mode == "auto" else SOUND_LEVELS[sound_mode]
+    requested_volume = (0.2 if voice_present else 0.0) if sound_mode == "auto" else SOUND_LEVELS[sound_mode]
+    original_volume = requested_volume if master_info["has_audio"] else 0.0
     loop_file = video.with_suffix(".original-beat.wav")
     mixed = video.with_name(video.stem + ".music.partial.mp4")
     mixed.unlink(missing_ok=True)
@@ -199,17 +227,7 @@ def add_soundtrack(video: Path, theme: str, *, sound_mode: str = "auto",
         duration = master_info["duration"]
         if progress:
             progress(0.95, "music")
-        fade_start = max(0.0, duration - 0.65)
-        # When retaining a voice/gym ambience at 20%, pull music down so it
-        # remains audible instead of being drowned by the instrumental.
-        music_volume = 0.50 if original_volume > 0 else 0.88
-        mix = (f"[0:a]aresample=48000,volume={original_volume:.2f}[ambient];"
-               f"[1:a]aresample=48000,volume={music_volume:.2f},"
-               f"atrim=duration={duration:.3f},asetpts=PTS-STARTPTS,"
-               f"afade=t=in:st=0:d=0.18,"
-               f"afade=t=out:st={fade_start:.3f}:d=0.65[beat];"
-               "[ambient][beat]amix=inputs=2:duration=first:normalize=0,"
-               "alimiter=limit=0.93[out]")
+        mix, music_volume = _original_music_mix(duration, original_volume)
         execute(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
                  "-i", str(video), "-stream_loop", "-1", "-i", str(loop_file),
                  "-filter_complex", mix,
@@ -224,6 +242,7 @@ def add_soundtrack(video: Path, theme: str, *, sound_mode: str = "auto",
         info.update({"original_audio_volume": original_volume,
                      "source_audio_mode": sound_mode,
                      "music_volume": music_volume,
+                     "dynamic_source_ducking": original_volume > 0,
                      "music_generated": True})
         return info
     finally:
