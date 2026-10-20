@@ -5,6 +5,7 @@ on:
       - 'web/**'
       - 'server.py'
       - 'editor.py'
+      - 'soundtrack.py'
       - 'montage.py'
       - 'qa/**'
       - '.github/workflows/browser-smoke.yml'
