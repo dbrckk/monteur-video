@@ -632,7 +632,9 @@
         const musicLabel = soundtrack.music_generated
           ? matched + "Piste originale : " + soundtrack.title + " · " +
             soundtrack.bpm + " BPM. Son des rushs : " +
-            Math.round((soundtrack.original_audio_volume || 0) * 100) + " %. "
+            Math.round((soundtrack.original_audio_volume || 0) * 100) + " %. " +
+            (soundtrack.dynamic_source_ducking
+              ? "Musique atténuée automatiquement pendant les sons captés au micro. " : "")
           : "";
         const instagramLabel = meta.reels_music?.selected
           ? "Musique recommandée : " + meta.reels_music.selected.title +
