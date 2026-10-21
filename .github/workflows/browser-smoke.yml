@@ -5,6 +5,7 @@ on:
       - 'web/**'
       - 'server.py'
       - 'editor.py'
+      - 'smart_reframe.py'
       - 'soundtrack.py'
       - 'montage.py'
       - 'qa/**'
