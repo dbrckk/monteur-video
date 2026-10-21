@@ -33,8 +33,8 @@ class PoseReframeTests(unittest.TestCase):
             # not detect them at all. Model is mocked, crop geometry is real.
             readings = [(i, 0.17, 0.91) for i in range(8)]
             with patch.dict("os.environ", {"MONTEUR_POSE_MODEL": str(model),
-                                            "MONTEUR_POSE_REFRAME": "1"}), \\
-                 patch("pose_reframe._decode_rgb", return_value=[b"frame"] * 8), \\
+                                            "MONTEUR_POSE_REFRAME": "1"}), \
+                 patch("pose_reframe._decode_rgb", return_value=[b"frame"] * 8), \
                  patch("pose_reframe._infer_poses", return_value=readings):
                 plan = plan_pose_reframe(Path(tmp) / "shot.mp4", 0, 8, 320, 180)
             self.assertEqual(plan.mode, "pose_guided")
@@ -83,12 +83,12 @@ class PoseReframeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             model = Path(tmp) / "pose.task"
             model.write_bytes(b"stub")
-            with patch.dict("os.environ", {"MONTEUR_POSE_MODEL": str(model)}), \\
-                 patch("pose_reframe._decode_rgb", return_value=[b"frame"] * 7), \\
+            with patch.dict("os.environ", {"MONTEUR_POSE_MODEL": str(model)}), \
+                 patch("pose_reframe._decode_rgb", return_value=[b"frame"] * 7), \
                  patch("pose_reframe._infer_poses", side_effect=ImportError):
                 self.assertIsNone(plan_pose_reframe(Path("clip.mp4"), 0, 5, 320, 180))
-            with patch.dict("os.environ", {"MONTEUR_POSE_MODEL": str(model)}), \\
-                 patch("pose_reframe._decode_rgb", return_value=[b"frame"] * 7), \\
+            with patch.dict("os.environ", {"MONTEUR_POSE_MODEL": str(model)}), \
+                 patch("pose_reframe._decode_rgb", return_value=[b"frame"] * 7), \
                  patch("pose_reframe._infer_poses", return_value=[(1, 0.1, 0.95)]):
                 self.assertIsNone(plan_pose_reframe(Path("clip.mp4"), 0, 5, 320, 180))
 
