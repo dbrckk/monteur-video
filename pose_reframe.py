@@ -190,7 +190,7 @@ def plan_pose_reframe(source: Path, start: float, duration: float,
         spread = [r[4] for r in measured if len(r) >= 5]
         if (len(spread) >= 2 and sum(spread) >= max(2, math.ceil(len(spread) * 0.60))):
             return ReframePlan("wide_grip_safe", (), round(confidence, 3))
-        anchors = _smooth_anchors([(t, x) for t, x, _ in measured], duration)
+        anchors = _smooth_anchors([(r[0], r[1]) for r in measured], duration)
         if max(abs(x - 0.5) for _, x in anchors) < 0.035:
             return None
         return ReframePlan("pose_guided", anchors, round(confidence, 3))
