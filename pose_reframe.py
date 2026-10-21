@@ -13,6 +13,7 @@ from pathlib import Path
 from statistics import median
 
 from smart_reframe import ReframePlan
+from equipment_guard import bar_like_span, stable_wide_bar, wide_limb_span
 
 POSE_WIDTH, POSE_HEIGHT = 320, 180
 POSE_FPS = 1
@@ -138,14 +139,21 @@ def _infer_poses(frames: list[bytes], model: Path,
             chosen = _select_person(result.pose_landmarks, fraction, previous)
             if chosen is not None:
                 x, confidence = chosen
-                measured.append((i / POSE_FPS, x, confidence))
+                # Use the *same* detected athlete for wrists/equipment evidence.
+                matches = [(abs(_target_from_pose(pose, fraction)[0] - x), pose)
+                           for pose in result.pose_landmarks
+                           if _target_from_pose(pose, fraction) is not None]
+                person_points = min(matches, key=lambda item: item[0])[1] if matches else []
+                bar_bounds = bar_like_span(frame, person_points)
+                spread_risk = wide_limb_span(person_points, fraction)
+                measured.append((i / POSE_FPS, x, confidence, bar_bounds, spread_risk))
                 previous = x
     return measured
 
 
 def plan_pose_reframe(source: Path, start: float, duration: float,
                       width: int, height: int) -> ReframePlan | None:
-    """A real static/active-person tracker; None means leave motion fallback in charge."""
+    """Track an athlete, keeping a full-frame safety layout for credible wide gear."""
     if os.environ.get("MONTEUR_POSE_REFRAME", "1") == "0":
         return None
     if not all(math.isfinite(v) for v in (start, duration)) or duration < 1.5:
@@ -171,6 +179,17 @@ def plan_pose_reframe(source: Path, start: float, duration: float,
         # Avoid huge jumps when a detected subject disappears then reappears.
         if any(b[0] - a[0] > 4.0 for a, b in zip(measured, measured[1:])):
             return None
+        # An actual bar-like shaft near both tracked hands is crop-critical.
+        # If it will not fit, keep the *entire* rush width over a blurred
+        # background rather than misidentify a barbell or cut off plates.
+        if stable_wide_bar([r[:4] for r in measured if len(r) >= 4],
+                           fraction):
+            return ReframePlan("equipment_safe", (), round(confidence, 3))
+        # Even with invisible gear, an exceptionally wide grip merits a
+        # conservative full-scene layout (not an equipment detection).
+        spread = [r[4] for r in measured if len(r) >= 5]
+        if (len(spread) >= 2 and sum(spread) >= max(2, math.ceil(len(spread) * 0.60))):
+            return ReframePlan("wide_grip_safe", (), round(confidence, 3))
         anchors = _smooth_anchors([(t, x) for t, x, _ in measured], duration)
         if max(abs(x - 0.5) for _, x in anchors) < 0.035:
             return None
