@@ -25,11 +25,21 @@ Les longs rushs sont analysés sur des fenêtres réparties sur toute leur duré
 
 L'encodage est limité en threads et les sous-clips ont de légers fondus audio aux points de coupe, sans musique externe ajoutée. Chaque sous-processus FFmpeg critique dispose d'une limite de temps ; un échec explicite est préférable à un montage bloqué indéfiniment. Comme les images ne sont échantillonnées qu'à intervalles pour économiser le CPU, le meilleur mouvement d'un rush très long peut encore passer entre deux fenêtres.
 
-## Recadrage vertical guidé par le mouvement (sans IA externe)
+## Recadrage vertical avec détection corporelle locale (MediaPipe)
+
+Sur le moteur Render, un modèle **Google MediaPipe Pose Landmarker Lite** (Apache-2.0) détecte localement les points du corps sur des images des rushs, y compris lorsqu'un sportif ne bouge pas. Le modèle est téléchargé **une seule fois lors de la construction Docker**, pas pendant les montages, et les images du tournage ne sont jamais envoyées à un service de reconnaissance extérieur. L'analyse utilise un flux RGB 320×180, à 1 image/seconde et **14 secondes maximum par plan**, pour limiter la consommation CPU du moteur gratuit. Le suivi conserve de préférence le même sportif lorsqu'une seconde personne entre dans le cadre et amortit les déplacements de caméra.
+
+La priorité du cadrage est : **corps reconnu → mouvement localisé → centre**. Un corps masqué, une faible confiance, une erreur de modèle ou une silhouette trop éloignée activent le repli ; on n'invente jamais une personne détectée. Les extrémités visibles (poignets, chevilles) sont prises en compte, avec une marge visuelle implicite, mais cette version **ne reconnaît pas les haltères, barres ni machines** : leur visibilité complète n'est pas garantie. Les longs plans continuent à partir de la dernière position connue après la fenêtre d'analyse. Les métadonnées distinguent les plans réellement détectés des plans suivis par le mouvement.
+
+L'intégration est **CPU-only et optionnelle**. Construire Docker avec `--build-arg INSTALL_POSE=0` pour économiser la mémoire (l'ancien suivi du mouvement reste disponible), ou définir `MONTEUR_POSE_REFRAME=0` pour désactiver uniquement la détection des silhouettes. `MONTEUR_SMART_REFRAME=0` désactive les deux suivis et force le cadrage centré. L'image Render par défaut contient MediaPipe et le modèle, et le test Docker vérifie son chargement réel.
+
+### Ancien repli de recadrage par le mouvement
+
+
 
 Les plans horizontaux exportés en 9:16 ne sont plus systématiquement recadrés au centre. Le moteur analyse **uniquement les segments réellement sélectionnés** via un aperçu FFmpeg limité à 96×54 pixels, 2 images/seconde et 18 secondes par plan. Quand l'activité est suffisamment **localisée**, il déplace horizontalement le cadrage avec interpolation continue et limitation de vitesse ; le changement reste stable pendant le plan. Les sources déjà verticales, les mouvements peu concluants, les changements globaux de lumière et les échecs d'analyse conservent le **recadrage central**, sans bloquer la production. Le rendu horizontal YouTube est inchangé.
 
-Cette étape est une **détection de mouvement**, pas un suivi garanti de personne ni d'équipement. Une personne immobile ou des objets mobiles peuvent être mal cadrés ; ne pas prétendre à une reconnaissance sémantique. L'export signale le nombre de plans effectivement recadrés et le nombre de replis centraux. Pour couper cette analyse sur un moteur personnel : `MONTEUR_SMART_REFRAME=0` (même encodeur et même cadrage centré que précédemment). Les tests CI construisent de vrais MP4 avec un sujet mobile, une animation globale et des cas de repli.
+**Le système de secours** est une **détection de mouvement**, pas un suivi garanti de personne ni d'équipement. Une personne immobile ou des objets mobiles peuvent être mal cadrés ; ne pas prétendre à une reconnaissance sémantique. L'export signale le nombre de plans effectivement recadrés et le nombre de replis centraux. Pour couper cette analyse sur un moteur personnel : `MONTEUR_SMART_REFRAME=0` (même encodeur et même cadrage centré que précédemment). Les tests CI construisent de vrais MP4 avec un sujet mobile, une animation globale et des cas de repli.
 
 ## Bande-son originale, rythme sportif et audio des rushs
 
