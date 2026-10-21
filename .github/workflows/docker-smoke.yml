@@ -9,6 +9,7 @@ on:
       - 'editor.py'
       - 'smart_reframe.py'
       - 'pose_reframe.py'
+      - 'equipment_guard.py'
       - 'soundtrack.py'
       - 'montage.py'
       - 'server.py'
