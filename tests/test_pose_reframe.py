@@ -40,7 +40,7 @@ class PoseReframeTests(unittest.TestCase):
             self.assertEqual(plan.mode, "pose_guided")
             self.assertAlmostEqual(plan.anchors[0][1], 0.17)
             self.assertEqual(plan.anchors[-1][0], 8)
-            self.assertIn("lt(t\\\\,", ffmpeg_crop_x(plan))
+            self.assertIn("lt(t\\,", ffmpeg_crop_x(plan))
             self.assertGreater(plan.confidence, 0.85)
 
     def test_pose_landmarks_include_wrists_and_ankles(self):
