@@ -421,6 +421,7 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
     if w % 2 or h % 2:
         raise ValueError("Dimensions de sortie non paires.")
     from smart_reframe import ffmpeg_crop_x, plan_vertical_reframe
+    from pose_reframe import plan_pose_reframe
     if vertical and source_dimensions is None:
         media = probe_media(source)
         source_dimensions = (media["width"], media["height"])
@@ -429,8 +430,10 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
     for i, clip in enumerate(clips):
         part = work / f"{i:04}.mp4"
         if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0":
-            plan = plan_vertical_reframe(source, clip.start, clip.duration,
-                                         *source_dimensions)
+            plan = (plan_pose_reframe(source, clip.start, clip.duration,
+                                      *source_dimensions)
+                    or plan_vertical_reframe(source, clip.start, clip.duration,
+                                             *source_dimensions))
             crop_x = ffmpeg_crop_x(plan)
             reframes.append(plan)
         else:
@@ -474,9 +477,11 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
     metadata["rendered_duration_seconds"] = round(sum(c.duration for c in clips), 2)
     metadata["auto_reframe"] = {
         "enabled": vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0",
+        "pose_guided_clips": sum(p.mode == "pose_guided" for p in reframes),
         "motion_guided_clips": sum(p.mode == "motion_guided" for p in reframes),
-        "center_fallback_clips": (len(clips) - sum(p.mode == "motion_guided" for p in reframes)) if vertical else 0,
-        "strategy": "motion_saliency_not_person_recognition",
+        "center_fallback_clips": (len(clips) - sum(
+            p.mode in {"pose_guided", "motion_guided"} for p in reframes)) if vertical else 0,
+        "strategy": "local_pose_then_motion_then_center",
         "smooth_interpolation": True,
     }
 
