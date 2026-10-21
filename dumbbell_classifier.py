@@ -99,7 +99,7 @@ def classify_handheld_dumbbell(frame: bytes, points: list,
             if int(np.argmax(raw)) == DUMBBELL_IMAGENET_INDEX:
                 best = max(best, float(probability))
         return best
-    except (ImportError, OSError, ValueError, RuntimeError, cv2.error):
+    except Exception:
         # Never compromise an otherwise renderable user's montage.
         return 0.0
 
