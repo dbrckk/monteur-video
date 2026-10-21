@@ -622,13 +622,13 @@
         const colorLabel = meta.color_grade?.source_grades?.some(g => g.measured)
           ? "Étalonnage adaptatif : exposition et couleurs harmonisées plan par plan. " : "";
         const reframe = meta.auto_reframe || {};
-        const gymLayoutLabel = reframe.equipment_safe_clips > 0 || reframe.wide_grip_safe_clips > 0
-          ? `Plan large préservé sur fond flouté : ${reframe.equipment_safe_clips || 0} plan(s) avec indice de barre près des mains, ${reframe.wide_grip_safe_clips || 0} plan(s) avec prise très écartée. Ce sont des indices de cadrage, pas une reconnaissance certifiée des machines ou haltères. `
+        const gymLayoutLabel = reframe.equipment_safe_clips > 0 || reframe.wide_grip_safe_clips > 0 || reframe.grip_edge_safe_clips > 0
+          ? `Plan large sur fond flouté : ${reframe.equipment_safe_clips || 0} plan(s) avec indice de barre, ${reframe.wide_grip_safe_clips || 0} prise(s) très écartée(s), ${reframe.grip_edge_safe_clips || 0} plan(s) avec une main risquant d'être coupée. Protection géométrique, pas reconnaissance certifiée du matériel. `
           : "";
         const reframeLabel = reframe.enabled && meta.aspect === "vertical"
           ? gymLayoutLabel + (reframe.pose_guided_clips > 0 || reframe.motion_guided_clips > 0
             ? `Détection corporelle : ${reframe.pose_guided_clips || 0} plan(s). Suivi du mouvement : ${reframe.motion_guided_clips || 0} plan(s). Cadrage central : ${reframe.center_fallback_clips || 0} plan(s). `
-            : reframe.equipment_safe_clips > 0 || reframe.wide_grip_safe_clips > 0
+            : reframe.equipment_safe_clips > 0 || reframe.wide_grip_safe_clips > 0 || reframe.grip_edge_safe_clips > 0
             ? `Cadrage central : ${reframe.center_fallback_clips || 0} plan(s). `
             : "Recadrage vertical central conservé : pas de détection suffisamment fiable. ")
           : "";
