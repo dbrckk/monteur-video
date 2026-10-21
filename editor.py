@@ -475,7 +475,7 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
     metadata["auto_reframe"] = {
         "enabled": vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0",
         "motion_guided_clips": sum(p.mode == "motion_guided" for p in reframes),
-        "center_fallback_clips": sum(p.mode != "motion_guided" for p in reframes),
+        "center_fallback_clips": (len(clips) - sum(p.mode == "motion_guided" for p in reframes)) if vertical else 0,
         "strategy": "motion_saliency_not_person_recognition",
         "smooth_interpolation": True,
     }
