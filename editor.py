@@ -411,7 +411,8 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
            transcript: list[dict], vertical: bool, has_audio: bool,
            size: int = 1080, progress: Callable[[float, str], None] | None = None,
            grade_filter: str | None = None,
-           shot_filters: list[str | None] | None = None) -> None:
+           shot_filters: list[str | None] | None = None,
+           source_dimensions: tuple[int, int] | None = None) -> None:
     if not clips:
         raise ValueError("Aucun passage utilisable.")
     work = destination.parent / "segments"
@@ -419,11 +420,23 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
     w, h = (size, size * 16 // 9) if vertical else (size * 16 // 9, size)
     if w % 2 or h % 2:
         raise ValueError("Dimensions de sortie non paires.")
+    from smart_reframe import ffmpeg_crop_x, plan_vertical_reframe
+    if vertical and source_dimensions is None:
+        media = probe_media(source)
+        source_dimensions = (media["width"], media["height"])
+    reframes = []
     files = []
     for i, clip in enumerate(clips):
         part = work / f"{i:04}.mp4"
+        if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0":
+            plan = plan_vertical_reframe(source, clip.start, clip.duration,
+                                         *source_dimensions)
+            crop_x = ffmpeg_crop_x(plan)
+            reframes.append(plan)
+        else:
+            crop_x = "(iw-ow)/2"
         scaling = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
-                   f"crop={w}:{h},setsar=1")
+                   f"crop={w}:{h}:{crop_x}:(ih-oh)/2,setsar=1")
         clip_filter = shot_filters[i] if shot_filters is not None else grade_filter
         if clip_filter:
             scaling += "," + clip_filter
@@ -459,6 +472,13 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
              "-f", "concat", "-safe", "0", "-i", str(concat),
              "-c", "copy", "-movflags", "+faststart", str(destination)], timeout=180)
     metadata["rendered_duration_seconds"] = round(sum(c.duration for c in clips), 2)
+    metadata["auto_reframe"] = {
+        "enabled": vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0",
+        "motion_guided_clips": sum(p.mode == "motion_guided" for p in reframes),
+        "center_fallback_clips": (len(clips) - sum(p.mode == "motion_guided" for p in reframes)) if vertical else 0,
+        "strategy": "motion_saliency_not_person_recognition",
+        "smooth_interpolation": True,
+    }
 
 
 def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
@@ -534,7 +554,8 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
         progress(0.40, "render")
     render(source, destination, clips, metadata, selected_speech,
            aspect == "vertical", info["has_audio"], size, progress,
-           grade_filter=grade_filter, shot_filters=shot_filters)
+           grade_filter=grade_filter, shot_filters=shot_filters,
+           source_dimensions=(info["width"], info["height"]))
     if progress:
         progress(1.0, "done")
     return metadata
