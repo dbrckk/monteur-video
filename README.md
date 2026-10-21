@@ -25,6 +25,12 @@ Les longs rushs sont analysés sur des fenêtres réparties sur toute leur duré
 
 L'encodage est limité en threads et les sous-clips ont de légers fondus audio aux points de coupe, sans musique externe ajoutée. Chaque sous-processus FFmpeg critique dispose d'une limite de temps ; un échec explicite est préférable à un montage bloqué indéfiniment. Comme les images ne sont échantillonnées qu'à intervalles pour économiser le CPU, le meilleur mouvement d'un rush très long peut encore passer entre deux fenêtres.
 
+## Protection du matériel de musculation en vidéo 9:16
+
+Quand MediaPipe observe des **poignets visibles** et qu'une longue ligne horizontale contrastée, située près des deux poignets, persiste sur plusieurs images, Monteur Studio repère un **indice visuel de barre longue**. Si la largeur observée ne rentre pas dans une fenêtre 9:16, le montage préserve automatiquement la totalité de l'image originale au centre d'un fond flouté vertical. Le même plan large de sécurité est proposé aux **prises de bras exceptionnellement écartées**, afin de réduire les coupes sur les mains ou les haltères proches des poignets.
+
+Ce système est une protection de composition, **pas une détection IA complète de barres, d'haltères ou de machines**. Une barre oblique, une prise très asymétrique, un appareil immobile ou un objet occulté peut ne pas être reconnu ; à l'inverse, une rambarde horizontale alignée avec les mains peut être prise pour une barre. L'effet protège la scène entière visible dans la source, mais ne peut reconstituer un matériel déjà absent de la vidéo. Les compteurs d'export distinguent `equipment_safe_clips`, `wide_grip_safe_clips`, le suivi de pose et les autres replis. Aucun service supplémentaire ni téléchargement de modèle n'est nécessaire, et tous les plans horizontaux YouTube sont inchangés.
+
 ## Recadrage vertical avec détection corporelle locale (MediaPipe)
 
 Sur le moteur Render, un modèle **Google MediaPipe Pose Landmarker Lite** (Apache-2.0) détecte localement les points du corps sur des images des rushs, y compris lorsqu'un sportif ne bouge pas. Le modèle est téléchargé **une seule fois lors de la construction Docker**, pas pendant les montages, et les images du tournage ne sont jamais envoyées à un service de reconnaissance extérieur. L'analyse utilise un flux RGB 320×180, à 1 image/seconde et **14 secondes maximum par plan**, pour limiter la consommation CPU du moteur gratuit. Le suivi conserve de préférence le même sportif lorsqu'une seconde personne entre dans le cadre et amortit les déplacements de caméra.
