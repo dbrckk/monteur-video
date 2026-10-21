@@ -16,12 +16,23 @@ MODEL_URL = ("https://huggingface.co/onnxmodelzoo/mobilenetv2-12/"
              "resolve/23a2a25/mobilenetv2-12.onnx?download=true")
 MODEL = pathlib.Path(__file__).resolve().parent.parent / "models" / "mobilenetv2-12.onnx"
 MIN_BYTES, MAX_BYTES = 10_000_000, 17_000_000
-# CI prints the hash so future builds can pin the exact artifact digest.
+# Exact tested ONNX payload from the above source revision; prevents silently
+# changing inference labels or model behavior in later Docker deployments.
+MODEL_SHA256 = "c0c3f76d93fa3fd6580652a45618618a220fced18babf65774ed169de0432ad5"
+
+
+def _hash_file(path: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(131072):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def install(destination: pathlib.Path = MODEL) -> pathlib.Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.is_file() and MIN_BYTES <= destination.stat().st_size <= MAX_BYTES:
+    if (destination.is_file() and MIN_BYTES <= destination.stat().st_size <= MAX_BYTES
+            and _hash_file(destination) == MODEL_SHA256):
         return destination
     req = urllib.request.Request(
         MODEL_URL, headers={"User-Agent": "MonteurStudio/1.0-offline-model-builder"})
@@ -43,6 +54,8 @@ def install(destination: pathlib.Path = MODEL) -> pathlib.Path:
             os.fsync(out.fileno())
             if not MIN_BYTES <= size <= MAX_BYTES:
                 raise ValueError("invalid classifier size")
+            if digest.hexdigest() != MODEL_SHA256:
+                raise ValueError("classifier SHA-256 mismatch: unverified model weights")
             os.chmod(tmp, 0o644)
             os.replace(tmp, destination)
             print("Dumbbell ONNX sha256:", digest.hexdigest(), "bytes:", size)
