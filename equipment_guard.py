@@ -124,3 +124,53 @@ def wide_limb_span(points: list, crop_fraction: float) -> bool:
     xs = [p[0] / FRAME_WIDTH for p in pair]
     # Keep a small safety margin around the hands and possible nearby weights.
     return max(xs) - min(xs) + 0.10 > crop_fraction * 1.65
+
+
+def _visible_hand_x(points: list) -> list[float]:
+    """Return independently visible hands; asymmetric curls need only one."""
+    if len(points) <= RIGHT_WRIST:
+        return []
+    valid = []
+    for index in (LEFT_WRIST, RIGHT_WRIST):
+        hand = points[index]
+        x, y = getattr(hand, "x", math.nan), getattr(hand, "y", math.nan)
+        confidence = min(getattr(hand, "visibility", 0.0),
+                         getattr(hand, "presence", 0.0))
+        if (all(math.isfinite(v) for v in (x, y, confidence))
+                and confidence >= 0.68 and 0.01 <= x <= 0.99
+                and 0.03 <= y <= 0.97):
+            valid.append(x)
+    return valid
+
+
+def grip_crop_risk(points: list, crop_fraction: float,
+                   crop_normalized: float) -> bool:
+    """Whether a proposed 9:16 crop loses a reliably tracked hand.
+
+    A small outer margin represents room for hand-held equipment. Unlike
+    wide_limb_span this explicitly handles unilateral and offset-height arms.
+    This is a geometric safety rule, not a barbell/dumbbell classification.
+    """
+    if not (0.05 < crop_fraction < 1 and
+            math.isfinite(crop_normalized) and 0 <= crop_normalized <= 1):
+        return False
+    hands = _visible_hand_x(points)
+    if not hands:
+        return False
+    crop_left = (1 - crop_fraction) * crop_normalized
+    crop_right = crop_left + crop_fraction
+    # Hands close to crop boundaries may hold equipment extending outwards.
+    equipment_margin = min(0.055, crop_fraction * 0.16)
+    # Do not switch layout for harmless one-pixel boundary jitter.
+    outside_tolerance = 0.028
+    return any((x - equipment_margin < crop_left - outside_tolerance or
+                x + equipment_margin > crop_right + outside_tolerance)
+               for x in hands)
+
+
+def stable_grip_crop_risk(readings: list[bool]) -> bool:
+    """A fleeting arm position should not force an entire shot into fit-mode."""
+    if len(readings) < 3:
+        return False
+    return sum(bool(value) for value in readings) >= max(
+        2, math.ceil(len(readings) * 0.55))
