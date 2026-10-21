@@ -10,6 +10,8 @@ on:
       - 'smart_reframe.py'
       - 'pose_reframe.py'
       - 'equipment_guard.py'
+      - 'dumbbell_classifier.py'
+      - 'scripts/download_dumbbell_model.py'
       - 'soundtrack.py'
       - 'montage.py'
       - 'server.py'
@@ -55,7 +57,8 @@ jobs:
           docker exec monteur-v1-smoke python -c "import os; assert os.environ['HF_HOME']=='/data/huggingface'"
           docker exec monteur-v1-smoke ffmpeg -hide_banner -filters 2>/dev/null | grep ' sidechaincompress ' >/dev/null
           docker exec monteur-v1-smoke python -c "from pathlib import Path; import mediapipe as mp; p=Path('/app/models/pose_landmarker_lite.task'); assert p.is_file(), p; m=mp.tasks.vision.PoseLandmarker.create_from_model_path(str(p)); m.close(); print('CPU person pose model loaded')"
-          docker exec monteur-v1-smoke python -c "from pathlib import Path; from pose_reframe import _infer_poses,POSE_WIDTH,POSE_HEIGHT; frames=[bytes([120])*(POSE_WIDTH*POSE_HEIGHT*3)]*2; result=_infer_poses(frames,Path('/app/models/pose_landmarker_lite.task'),0.316); assert isinstance(result,list); print('CPU pose inference OK')" 
+          docker exec monteur-v1-smoke python -c "from pathlib import Path; from pose_reframe import _infer_poses,POSE_WIDTH,POSE_HEIGHT; frames=[bytes([120])*(POSE_WIDTH*POSE_HEIGHT*3)]*2; result=_infer_poses(frames,Path('/app/models/pose_landmarker_lite.task'),0.316); assert isinstance(result,list); print('CPU pose inference OK')"
+          docker exec monteur-v1-smoke python -c "from dumbbell_classifier import _network; import numpy as np,os,resource; m=os.environ['MONTEUR_DUMBBELL_MODEL']; net=_network(m); net.setInput(np.zeros((1,3,224,224),dtype=np.float32)); a=net.forward().reshape(-1); rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024; assert a.size==1000 and np.all(np.isfinite(a)); assert rss<450, f'ONNX process RSS exceeds 450 MiB: {rss:.1f}'; print('CPU ImageNet dumbbell ONNX model OK, RSS',rss,'MiB')"  
       - name: Capture container logs
         if: always()
         run: docker logs monteur-v1-smoke || true
