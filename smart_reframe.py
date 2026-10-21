@@ -130,7 +130,7 @@ def plan_vertical_reframe(source: Path, start: float, duration: float,
 
 def ffmpeg_crop_x(plan: ReframePlan) -> str:
     """Continuous, bounded linear interpolation for FFmpeg's per-frame crop x."""
-    if plan.mode != "motion_guided" or not plan.anchors:
+    if plan.mode not in {"motion_guided", "pose_guided"} or not plan.anchors:
         return "(iw-ow)/2"
     points = plan.anchors
     expression = f"{points[-1][1]:.5f}"

@@ -8,6 +8,7 @@ on:
       - 'requirements*.txt'
       - 'editor.py'
       - 'smart_reframe.py'
+      - 'pose_reframe.py'
       - 'soundtrack.py'
       - 'montage.py'
       - 'server.py'
@@ -24,7 +25,7 @@ jobs:
         run: |
           bash -n scripts/start-free.sh scripts/start-stable.sh
           docker compose -f compose.yaml -f compose.remote.yaml config --quiet
-      - name: Build working FFmpeg engine container (light mode)
+      - name: Build FFmpeg engine container with local pose inference
         run: docker build --build-arg INSTALL_WHISPER=0 -t monteur-v1:ci .
       - name: Boot the real API container with a private token
         run: |
@@ -52,6 +53,8 @@ jobs:
           docker inspect --format '{{.State.Health.Status}}' monteur-v1-smoke
           docker exec monteur-v1-smoke python -c "import os; assert os.environ['HF_HOME']=='/data/huggingface'"
           docker exec monteur-v1-smoke ffmpeg -hide_banner -filters 2>/dev/null | grep ' sidechaincompress ' >/dev/null
+          docker exec monteur-v1-smoke python -c "from pathlib import Path; import mediapipe as mp; p=Path('/app/models/pose_landmarker_lite.task'); assert p.is_file(), p; m=mp.tasks.vision.PoseLandmarker.create_from_model_path(str(p)); m.close(); print('CPU person pose model loaded')"
+          docker exec monteur-v1-smoke python -c "from pathlib import Path; from pose_reframe import _infer_poses,POSE_WIDTH,POSE_HEIGHT; frames=[bytes([120])*(POSE_WIDTH*POSE_HEIGHT*3)]*2; result=_infer_poses(frames,Path('/app/models/pose_landmarker_lite.task'),0.316); assert isinstance(result,list); print('CPU pose inference OK')" 
       - name: Capture container logs
         if: always()
         run: docker logs monteur-v1-smoke || true

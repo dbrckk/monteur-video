@@ -1,0 +1,3 @@
+# Optional/offline CPU pose guidance, installed in Render's default image.
+# Bundled wheel supports Python 3.12 on Linux; model asset fetched at build time.
+mediapipe==0.10.32
