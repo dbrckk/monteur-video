@@ -439,10 +439,10 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
         else:
             crop_x = "(iw-ow)/2"
         if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0" and plan.mode in {
-                "equipment_safe", "wide_grip_safe"}:
-            # A wide bar or outstretched grips physically cannot fit a 9:16
-            # crop. Preserve the entire source over a blurred fill, instead
-            # of sacrificing the person's hands or visible weight plates.
+                "equipment_safe", "wide_grip_safe", "grip_edge_safe"}:
+            # Wide bars, grips or a visible hand outside the proposed crop
+            # cannot safely fit 9:16. Preserve the entire source over a
+            # blurred fill rather than cutting hands or nearby equipment.
             scaling = (f"split=2[wide_bg][wide_fg];"
                        f"[wide_bg]scale={w}:{h}:force_original_aspect_ratio=increase,"
                        f"crop={w}:{h},boxblur=10:1[soft_bg];"
@@ -494,10 +494,11 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
         "motion_guided_clips": sum(p.mode == "motion_guided" for p in reframes),
         "equipment_safe_clips": sum(p.mode == "equipment_safe" for p in reframes),
         "wide_grip_safe_clips": sum(p.mode == "wide_grip_safe" for p in reframes),
+        "grip_edge_safe_clips": sum(p.mode == "grip_edge_safe" for p in reframes),
         "center_fallback_clips": (len(clips) - sum(
             p.mode in {"pose_guided", "motion_guided",
-                       "equipment_safe", "wide_grip_safe"} for p in reframes)) if vertical else 0,
-        "strategy": "pose_and_grip_guard_then_motion_then_center",
+                       "equipment_safe", "wide_grip_safe", "grip_edge_safe"} for p in reframes)) if vertical else 0,
+        "strategy": "pose_and_grip_edge_guard_then_motion_then_center",
         "smooth_interpolation": True,
     }
 
