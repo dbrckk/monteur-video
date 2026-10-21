@@ -622,13 +622,13 @@
         const colorLabel = meta.color_grade?.source_grades?.some(g => g.measured)
           ? "Étalonnage adaptatif : exposition et couleurs harmonisées plan par plan. " : "";
         const reframe = meta.auto_reframe || {};
-        const gymLayoutLabel = reframe.equipment_safe_clips > 0 || reframe.wide_grip_safe_clips > 0 || reframe.grip_edge_safe_clips > 0
-          ? `Plan large sur fond flouté : ${reframe.equipment_safe_clips || 0} plan(s) avec indice de barre, ${reframe.wide_grip_safe_clips || 0} prise(s) très écartée(s), ${reframe.grip_edge_safe_clips || 0} plan(s) avec une main risquant d'être coupée. Protection géométrique, pas reconnaissance certifiée du matériel. `
+        const gymLayoutLabel = reframe.equipment_safe_clips > 0 || reframe.wide_grip_safe_clips > 0 || reframe.grip_edge_safe_clips > 0 || reframe.dumbbell_safe_clips > 0
+          ? `Plan large sur fond flouté : ${reframe.dumbbell_safe_clips || 0} plan(s) avec classification IA locale de l'haltère, ${reframe.equipment_safe_clips || 0} indice(s) de barre, ${reframe.wide_grip_safe_clips || 0} prise(s) très écartée(s), ${reframe.grip_edge_safe_clips || 0} plan(s) avec main près du bord. Une classification d'haltère n'est pas une localisation précise du matériel. `
           : "";
         const reframeLabel = reframe.enabled && meta.aspect === "vertical"
           ? gymLayoutLabel + (reframe.pose_guided_clips > 0 || reframe.motion_guided_clips > 0
             ? `Détection corporelle : ${reframe.pose_guided_clips || 0} plan(s). Suivi du mouvement : ${reframe.motion_guided_clips || 0} plan(s). Cadrage central : ${reframe.center_fallback_clips || 0} plan(s). `
-            : reframe.equipment_safe_clips > 0 || reframe.wide_grip_safe_clips > 0 || reframe.grip_edge_safe_clips > 0
+            : reframe.equipment_safe_clips > 0 || reframe.wide_grip_safe_clips > 0 || reframe.grip_edge_safe_clips > 0 || reframe.dumbbell_safe_clips > 0
             ? `Cadrage central : ${reframe.center_fallback_clips || 0} plan(s). `
             : "Recadrage vertical central conservé : pas de détection suffisamment fiable. ")
           : "";
