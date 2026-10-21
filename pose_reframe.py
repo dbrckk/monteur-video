@@ -15,6 +15,7 @@ from statistics import median
 from smart_reframe import ReframePlan
 from equipment_guard import (bar_like_span, grip_crop_risk, stable_grip_crop_risk,
                              stable_wide_bar, wide_limb_span)
+from dumbbell_classifier import classify_handheld_dumbbell, stable_dumbbell_evidence
 
 POSE_WIDTH, POSE_HEIGHT = 320, 180
 POSE_FPS = 1
@@ -148,8 +149,10 @@ def _infer_poses(frames: list[bytes], model: Path,
                 bar_bounds = bar_like_span(frame, person_points)
                 spread_risk = wide_limb_span(person_points, fraction)
                 hand_edge_risk = grip_crop_risk(person_points, fraction, x)
+                dumbbell_score = classify_handheld_dumbbell(
+                    frame, person_points, fraction, x)
                 measured.append((i / POSE_FPS, x, confidence, bar_bounds,
-                                 spread_risk, hand_edge_risk))
+                                 spread_risk, hand_edge_risk, dumbbell_score))
                 previous = x
     return measured
 
@@ -193,6 +196,11 @@ def plan_pose_reframe(source: Path, start: float, duration: float,
         spread = [r[4] for r in measured if len(r) >= 5]
         if (len(spread) >= 2 and sum(spread) >= max(2, math.ceil(len(spread) * 0.60))):
             return ReframePlan("wide_grip_safe", (), round(confidence, 3))
+        # Local ImageNet dumbbell recognition can add confidence to preserve
+        # an edge-adjacent handheld weight. This is classification rather
+        # than a box detector and is never used for machine recognition.
+        if stable_dumbbell_evidence([r[6] for r in measured if len(r) >= 7]):
+            return ReframePlan("dumbbell_safe", (), round(confidence, 3))
         # Unilateral dumbbell curls and offset-height reaches can be lost
         # even when the two wrists are not horizontally aligned.
         if stable_grip_crop_risk([r[5] for r in measured if len(r) >= 6]):

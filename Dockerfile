@@ -4,10 +4,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certi
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements-ai.txt requirements.txt requirements-pose.txt ./
-COPY scripts/download_pose_model.py ./scripts/download_pose_model.py
+COPY scripts/download_pose_model.py scripts/download_dumbbell_model.py ./scripts/
 # Full image uses Whisper CPU; CI/light installs remain FFmpeg-functional.
 ARG INSTALL_WHISPER=0
 ARG INSTALL_POSE=1
+ARG INSTALL_DUMBBELL=1
 RUN if [ "$INSTALL_WHISPER" = "1" ]; then \
       pip install --no-cache-dir -r requirements-ai.txt; \
     else \
@@ -17,12 +18,16 @@ RUN if [ "$INSTALL_POSE" = "1" ]; then \
       pip install --no-cache-dir -r requirements-pose.txt && \
       python scripts/download_pose_model.py; \
     fi
-COPY equipment_guard.py pose_reframe.py smart_reframe.py editor.py montage.py visual_quality.py color_grade.py action_story.py pose_evidence.py soundtrack.py reels_music.py server.py ./
+RUN if [ "$INSTALL_POSE" = "1" ] && [ "$INSTALL_DUMBBELL" = "1" ]; then \
+      python scripts/download_dumbbell_model.py; \
+    fi
+COPY dumbbell_classifier.py equipment_guard.py pose_reframe.py smart_reframe.py editor.py montage.py visual_quality.py color_grade.py action_story.py pose_evidence.py soundtrack.py reels_music.py server.py ./
 COPY web/ ./web/
 RUN useradd -m -u 10001 appuser && mkdir -p /data && chown appuser:appuser /data
 USER appuser
 ENV EDITOR_DATA_DIR=/data HF_HOME=/data/huggingface WHISPER_MODEL=base WHISPER_DEVICE=cpu \
-    MONTEUR_POSE_MODEL=/app/models/pose_landmarker_lite.task
+    MONTEUR_POSE_MODEL=/app/models/pose_landmarker_lite.task \
+    MONTEUR_DUMBBELL_MODEL=/app/models/mobilenetv2-12.onnx
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.getenv('PORT','8000')+'/api/health',timeout=4).read()" || exit 1
 EXPOSE 8000
 CMD ["sh","-c","exec uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

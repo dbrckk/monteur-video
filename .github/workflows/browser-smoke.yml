@@ -8,6 +8,7 @@ on:
       - 'smart_reframe.py'
       - 'pose_reframe.py'
       - 'equipment_guard.py'
+      - 'dumbbell_classifier.py'
       - 'soundtrack.py'
       - 'montage.py'
       - 'qa/**'
