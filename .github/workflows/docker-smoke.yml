@@ -7,6 +7,7 @@ on:
       - 'compose.remote.yaml'
       - 'requirements*.txt'
       - 'editor.py'
+      - 'smart_reframe.py'
       - 'soundtrack.py'
       - 'montage.py'
       - 'server.py'
