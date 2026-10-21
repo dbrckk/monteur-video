@@ -18,6 +18,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
       - name: Compile Python modules
-        run: python -m compileall -q smart_reframe.py editor.py montage.py server.py tests
+        run: python -m compileall -q pose_reframe.py smart_reframe.py editor.py montage.py server.py tests
       - name: Run unit, API and real render tests
         run: python -m unittest discover -s tests -v
