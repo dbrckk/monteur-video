@@ -438,8 +438,21 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
             reframes.append(plan)
         else:
             crop_x = "(iw-ow)/2"
-        scaling = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
-                   f"crop={w}:{h}:{crop_x}:(ih-oh)/2,setsar=1")
+        if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0" and plan.mode in {
+                "equipment_safe", "wide_grip_safe"}:
+            # A wide bar or outstretched grips physically cannot fit a 9:16
+            # crop. Preserve the entire source over a blurred fill, instead
+            # of sacrificing the person's hands or visible weight plates.
+            scaling = (f"split=2[wide_bg][wide_fg];"
+                       f"[wide_bg]scale={w}:{h}:force_original_aspect_ratio=increase,"
+                       f"crop={w}:{h},boxblur=10:1[soft_bg];"
+                       f"[wide_fg]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                       f"setsar=1[full_shot];"
+                       "[soft_bg][full_shot]overlay=(W-w)/2:(H-h)/2:shortest=1,"
+                       "setsar=1")
+        else:
+            scaling = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+                       f"crop={w}:{h}:{crop_x}:(ih-oh)/2,setsar=1")
         clip_filter = shot_filters[i] if shot_filters is not None else grade_filter
         if clip_filter:
             scaling += "," + clip_filter
@@ -479,9 +492,12 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
         "enabled": vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0",
         "pose_guided_clips": sum(p.mode == "pose_guided" for p in reframes),
         "motion_guided_clips": sum(p.mode == "motion_guided" for p in reframes),
+        "equipment_safe_clips": sum(p.mode == "equipment_safe" for p in reframes),
+        "wide_grip_safe_clips": sum(p.mode == "wide_grip_safe" for p in reframes),
         "center_fallback_clips": (len(clips) - sum(
-            p.mode in {"pose_guided", "motion_guided"} for p in reframes)) if vertical else 0,
-        "strategy": "local_pose_then_motion_then_center",
+            p.mode in {"pose_guided", "motion_guided",
+                       "equipment_safe", "wide_grip_safe"} for p in reframes)) if vertical else 0,
+        "strategy": "pose_and_grip_guard_then_motion_then_center",
         "smooth_interpolation": True,
     }
 

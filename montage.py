@@ -450,11 +450,15 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             "enabled": aspect == "vertical" and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0",
             "pose_guided_clips": sum(d["auto_reframe"].get("pose_guided_clips", 0)
                                      for d in details),
+            "equipment_safe_clips": sum(d["auto_reframe"].get("equipment_safe_clips", 0)
+                                        for d in details),
+            "wide_grip_safe_clips": sum(d["auto_reframe"].get("wide_grip_safe_clips", 0)
+                                        for d in details),
             "motion_guided_clips": sum(d["auto_reframe"].get("motion_guided_clips", 0)
                                        for d in details),
             "center_fallback_clips": sum(d["auto_reframe"].get("center_fallback_clips", 0)
                                          for d in details),
-            "strategy": "local_pose_then_motion_then_center",
+            "strategy": "pose_and_grip_guard_then_motion_then_center",
             "smooth_interpolation": True,
         },
         "music_profile": music_profile,
