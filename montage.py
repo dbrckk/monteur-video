@@ -414,6 +414,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
             "rendered_seconds": child["rendered_duration_seconds"],
             "speech_engine": child["speech_engine"],
             "action_quality": child.get("action_quality", {}),
+            "auto_reframe": child.get("auto_reframe", {}),
             "visual_analysis": child.get("visual_analysis", "unavailable"),
             "captured_at": duration.get("captured_at"),
             "color_grade": grades["source_grades"][index]["correction"],
@@ -445,6 +446,15 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "resolution": "9:16" if aspect == "vertical" else "16:9",
         "source_count": len(sources),
         "action_quality": action_quality,
+        "auto_reframe": {
+            "enabled": aspect == "vertical",
+            "motion_guided_clips": sum(d["auto_reframe"].get("motion_guided_clips", 0)
+                                       for d in details),
+            "center_fallback_clips": sum(d["auto_reframe"].get("center_fallback_clips", 0)
+                                         for d in details),
+            "strategy": "motion_saliency_not_person_recognition",
+            "smooth_interpolation": True,
+        },
         "music_profile": music_profile,
         "color_grade": grades,
         "sequence_strategy": sequence_strategy,
