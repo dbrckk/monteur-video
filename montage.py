@@ -447,7 +447,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "source_count": len(sources),
         "action_quality": action_quality,
         "auto_reframe": {
-            "enabled": aspect == "vertical",
+            "enabled": aspect == "vertical" and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0",
             "motion_guided_clips": sum(d["auto_reframe"].get("motion_guided_clips", 0)
                                        for d in details),
             "center_fallback_clips": sum(d["auto_reframe"].get("center_fallback_clips", 0)
