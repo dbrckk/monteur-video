@@ -34,6 +34,8 @@ def download(destination: pathlib.Path = MODEL_FILE) -> pathlib.Path:
                     if size > MAX_BYTES:
                         raise ValueError("Pose model exceeds bounded download size")
                     temporary.write(chunk)
+            temporary.flush()
+            os.fsync(temporary.fileno())
             if size < MIN_BYTES or not zipfile.is_zipfile(candidate):
                 raise ValueError("Invalid MediaPipe Pose model bundle")
             os.replace(candidate, destination)
