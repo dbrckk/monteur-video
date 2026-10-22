@@ -12,6 +12,7 @@ import hashlib
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Callable, Sequence
 
 from editor import THEMES, detect_scenes, edit_video, execute, probe_media, social_metadata
@@ -379,54 +380,68 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         return result
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    work = destination.parent / "rushes"
-    work.mkdir(parents=True, exist_ok=True)
-    rendered = []
-    details = []
-    selected_speech = []
-    combined_clips = []
-    for position, index in enumerate(order):
-        source, duration, budget = sources[index], info[index], budgets[index]
-        part = work / f"rush-{position:02}.mp4"
+    # Every montage owns one disposable rush directory. Never reuse or
+    # expose half-rendered previous attempts as final output.
+    with TemporaryDirectory(prefix=f".{destination.stem}-rushes-",
+                            dir=destination.parent) as scratch:
+        work = Path(scratch)
+        rendered = []
+        details = []
+        selected_speech = []
+        combined_clips = []
+        for position, index in enumerate(order):
+            source, duration, budget = sources[index], info[index], budgets[index]
+            part = work / f"rush-{position:02}.mp4"
+            if progress:
+                progress(0.32 + position / len(sources) * 0.62, "highlights")
+            child = edit_video(
+                Path(source), part, theme=theme, aspect=aspect,
+                target_seconds=budget, transcribe=transcribe, size=size,
+                allow_short=True,
+                detected_scenes=scene_cache[index],
+                visual_samples=quality_cache[index],
+                music_profile=music_profile,
+                grade_filter=grades["source_grades"][index]["filter"],
+                color_reference=grades, source_index=index,
+                progress=(lambda p, stage, position=position: progress(
+                    min(0.94, 0.32 + (position + p) / len(sources) * 0.62), stage))
+                if progress else None,
+            )
+            rendered.append(part)
+            selected_speech.extend(child.get("selected_transcript", []))
+            combined_clips.extend({"source_index": index, "sequence_position": position,
+                                   **clip} for clip in child["clips"])
+            details.append({
+                "index": index, "sequence_position": position,
+                "name": source_names[index] if source_names else Path(source).name,
+                "duration_seconds": round(duration["duration"], 2),
+                "rendered_seconds": child["rendered_duration_seconds"],
+                "speech_engine": child["speech_engine"],
+                "action_quality": child.get("action_quality", {}),
+                "auto_reframe": child.get("auto_reframe", {}),
+                "visual_analysis": child.get("visual_analysis", "unavailable"),
+                "captured_at": duration.get("captured_at"),
+                "color_grade": grades["source_grades"][index]["correction"],
+            })
+        concat = work / "playlist.txt"
+        concat.write_text("".join(f"file '{part.name}'\n" for part in rendered), encoding="utf-8")
+        staged = work / "assembled.mp4"
+        execute(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+                 "-f", "concat", "-safe", "0", "-i", str(concat),
+                 "-map", "0:v:0", "-map", "0:a:0",
+                 "-c", "copy", "-movflags", "+faststart", str(staged)], timeout=180)
+        expected_w, expected_h = ((size, size * 16 // 9) if aspect == "vertical"
+                                  else (size * 16 // 9, size))
+        validated = probe_media(staged)
+        expected_seconds = sum(item["rendered_seconds"] for item in details)
+        if ((validated["width"], validated["height"]) != (expected_w, expected_h)
+                or not validated["has_audio"]
+                or abs(validated["duration"] - expected_seconds) >
+                max(0.45, expected_seconds * 0.06)):
+            raise RuntimeError("Assemblage multividéo invalide : dimensions, son ou durée incohérents")
+        os.replace(staged, destination)
         if progress:
-            progress(0.32 + position / len(sources) * 0.62, "highlights")
-        child = edit_video(
-            Path(source), part, theme=theme, aspect=aspect,
-            target_seconds=budget, transcribe=transcribe, size=size,
-            allow_short=True,
-            detected_scenes=scene_cache[index],
-            visual_samples=quality_cache[index],
-            music_profile=music_profile,
-            grade_filter=grades["source_grades"][index]["filter"],
-            color_reference=grades, source_index=index,
-            progress=(lambda p, stage, position=position: progress(
-                min(0.94, 0.32 + (position + p) / len(sources) * 0.62), stage))
-            if progress else None,
-        )
-        rendered.append(part)
-        selected_speech.extend(child.get("selected_transcript", []))
-        combined_clips.extend({"source_index": index, "sequence_position": position,
-                               **clip} for clip in child["clips"])
-        details.append({
-            "index": index, "sequence_position": position,
-            "name": source_names[index] if source_names else Path(source).name,
-            "duration_seconds": round(duration["duration"], 2),
-            "rendered_seconds": child["rendered_duration_seconds"],
-            "speech_engine": child["speech_engine"],
-            "action_quality": child.get("action_quality", {}),
-            "auto_reframe": child.get("auto_reframe", {}),
-            "visual_analysis": child.get("visual_analysis", "unavailable"),
-            "captured_at": duration.get("captured_at"),
-            "color_grade": grades["source_grades"][index]["correction"],
-        })
-    concat = work / "playlist.txt"
-    concat.write_text("".join(f"file '{part.name}'\n" for part in rendered), encoding="utf-8")
-    execute(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
-             "-f", "concat", "-safe", "0", "-i", str(concat),
-             "-map", "0:v:0", "-map", "0:a:0",
-             "-c", "copy", "-movflags", "+faststart", str(destination)], timeout=180)
-    if progress:
-        progress(0.98, "render")
+            progress(0.98, "render")
     output = social_metadata(theme, selected_speech, sum(x["duration"] for x in info))
     measured_actions = sum(d["action_quality"].get("observed_motion_bouts", 0)
                            for d in details)
