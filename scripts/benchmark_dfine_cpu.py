@@ -20,7 +20,7 @@ REPOSITORY = "onnx-community/dfine_s_obj365-ONNX"
 BASE = "https://huggingface.co/"
 TARGET_CLASSES = {1: "Person", 323: "Dumbbell", 332: "Treadmill", 349: "Barbell"}
 DOWNLOAD_MAX_BYTES = 65_000_000
-MODEL_NAME = "onnx/model_int8.onnx"
+MODEL_NAME = "onnx/model.onnx"
 
 
 def _get_bytes(url: str, maximum: int) -> bytes:
@@ -77,7 +77,7 @@ def run() -> dict:
         "production_enabled": False,
         "commercial_training_data_review_required": True,
         "measured_under_512_mib": False,
-        "note": "Synthetic inference measures engineering fitness, not detection accuracy.",
+        "note": "FP32 fallback after INT8 ConvInteger runtime incompatibility; synthetic inference is not detection accuracy.",
     }
     try:
         from numpy import float32, bool_ as np_bool, zeros, ones, isfinite
