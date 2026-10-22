@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 import wave
 
-from benchmark_dfine_cpu import _get_bytes, _memory_mb, _tensor_shape
+from scripts.benchmark_dfine_cpu import _get_bytes, _memory_mb, _tensor_shape
 
 MODEL_REPO = "onnx-community/dfine_s_obj365-ONNX"
 MODEL_REVISION = "a61e4cdfe4f9d3188a305d91e37dbf38688ffbb8"
