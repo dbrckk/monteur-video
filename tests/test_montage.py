@@ -4,6 +4,9 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from editor import execute as engine_execute
 
 from montage import (
     FILTER_PRESETS, MAX_SOURCES, allocation, apply_filter,
@@ -98,6 +101,9 @@ class MultiRenderTests(unittest.TestCase):
                 "-show_entries", "stream=codec_name", "-of", "csv=p=0",
                 str(original)], text=True).strip()
             self.assertEqual(stream, "aac")
+            # The complete rush workflow must leave no duplicated intermediates.
+            self.assertEqual(list(root.glob(".joined-rushes-*")), [])
+            self.assertFalse((root / "rushes").exists())
             before = original.read_bytes()
             filtered = root / "filters" / "impact.mp4"
             apply_filter(original, filtered, "impact")
@@ -108,6 +114,32 @@ class MultiRenderTests(unittest.TestCase):
             self.assertNotEqual(filtered.read_bytes(), before)
             with self.assertRaises(ValueError):
                 apply_filter(original, root / "bad.mp4", "not-a-filter")
+
+    def test_failed_multirush_concat_preserves_previous_master(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            first, second = root / "red.mp4", root / "blue.mp4"
+            self.create_clip(first, "red", False)
+            self.create_clip(second, "blue", False)
+            output = root / "joined.mp4"
+            edit_many([first, second], output, theme="fitness",
+                      aspect="youtube", target_seconds=10,
+                      transcribe=False, size=360)
+            previous = output.read_bytes()
+
+            def fail_only_playlist(command, timeout=None):
+                if "-f" in command and "concat" in command:
+                    raise RuntimeError("Simulated failed multi-rush playlist")
+                return engine_execute(command, timeout)
+
+            with patch("montage.execute", side_effect=fail_only_playlist):
+                with self.assertRaisesRegex(RuntimeError, "Simulated failed"):
+                    edit_many([first, second], output, theme="fitness",
+                              aspect="youtube", target_seconds=10,
+                              transcribe=False, size=360)
+            self.assertEqual(output.read_bytes(), previous)
+            self.assertEqual(self.dimensions(output), "640,360")
+            self.assertEqual(list(root.glob(".joined-rushes-*")), [])
 
     def test_every_theme_filter_encodes_correctly(self):
         with tempfile.TemporaryDirectory() as tmp:
