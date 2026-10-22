@@ -93,7 +93,7 @@ jobs:
                   wav.setnchannels(1)
                   wav.setsampwidth(2)
                   wav.setframerate(16000)
-                  wav.writeframes(b'\\0' * (16000 * 2))
+                  wav.writeframes(bytes(16000 * 2))
               samples = decode_audio(str(path), sampling_rate=16000)
               assert len(samples) == 16000, len(samples)
               model = WhisperModel('tiny', device='cpu', compute_type='int8',
