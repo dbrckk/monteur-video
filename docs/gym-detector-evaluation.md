@@ -47,6 +47,12 @@ In the first isolated full-stack run, the exact Whisper-enabled production image
 
 **Next commercially practical approach:** retain the currently deployed MediaPipe + MobileNet + conservative geometric equipment framing; evaluate independent fully rights-cleared smaller detectors (or fine-tune on specifically commercially licensed original/synthetic gym clips) on a separate machine and use them only if full pipeline memory/accuracy gates succeed. Apache-2.0 on a model *card* alone does not establish the provenance of training data or inherited base weights.
 
+## Controlled A/B research comparison and model provenance
+
+The full-stack workflow now runs **two independent containers under identical hard limits** (512 MiB, 0.1 CPU): the original production-capable stack without D-FINE as a control arm, and the same stack with the D-FINE Small Objects365 research checkpoint. The experiment downloads no user footage. It reports memory peaks and errors separately, and **never infers an exact model-memory delta from a 512 MiB saturated reading**. A failure of both arms would indicate a general full-stack overload, not evidence uniquely attributable to D-FINE. A successful A/B benchmark still cannot clear Objects365 commercial training-data rights.
+
+A separate [model rights register](model-rights-register.json) records the pretrained weights already bundled by the optional/public Docker builds. Importantly, **ImageNet's official access terms restrict access to the dataset to noncommercial research/education**. That does not by itself settle the licensing of separately distributed ImageNet-derived MobileNet weights, so the register flags their provenance for **manual commercial review**, rather than representing all Apache-2 weight cards as complete clearance. The upstream [Open Images V7 license statement](https://storage.googleapis.com/openimages/web/factsfigures_v7.html) separately states that box annotations are CC BY 4.0 and listed images CC BY 2.0, **but does not warrant individual image license validity**. Future gym detection training must audit each original source, attribution, permitted use and inherited pretrained weights independently.
+
 ## Hard release criteria
 
 A model may only be considered for the public Render Free backend after the following are independently verified:
