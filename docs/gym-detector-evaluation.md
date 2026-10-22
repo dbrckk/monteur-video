@@ -53,6 +53,16 @@ The full-stack workflow now runs **two independent containers under identical ha
 
 A separate [model rights register](model-rights-register.json) records the pretrained weights already bundled by the optional/public Docker builds. Importantly, **ImageNet's official access terms restrict access to the dataset to noncommercial research/education**. That does not by itself settle the licensing of separately distributed ImageNet-derived MobileNet weights, so the register flags their provenance for **manual commercial review**, rather than representing all Apache-2 weight cards as complete clearance. The upstream [Open Images V7 license statement](https://storage.googleapis.com/openimages/web/factsfigures_v7.html) separately states that box annotations are CC BY 4.0 and listed images CC BY 2.0, **but does not warrant individual image license validity**. Future gym detection training must audit each original source, attribution, permitted use and inherited pretrained weights independently.
 
+## Controlled A/B actual outcome — 22 October 2026
+
+The [research-only GitHub Actions run 39799897286](https://github.com/dbrckk/monteur-video/actions/runs/39799897286) executed two isolated containers using the same 512-MiB RAM and 0.1-CPU limits, the same optional Whisper-enabled app stack, and the same synthetic probe:
+- **Without D-FINE (control arm): 512.0 MiB cgroup peak**, `not_qualified`.
+- **With D-FINE FP32: 512.0 MiB cgroup peak**, `not_qualified`.
+
+These are *censored measurements*: the 512-MiB hard ceiling is reached in both arms, so subtracting peaks as `0.0 MiB` **would not measure the detector's actual incremental memory consumption**. The separate ONNX three-model probe (without Whisper) peaked around 285–287 MiB and is not a production full-stack result. The audio test still encountered the separately documented faster-whisper / PyAV metadata incompatibility; a fix is being validated on its own branch.
+
+The decisive finding is that **a Whisper-enabled, multiple-model full-stack configuration itself needs memory redesign under 512 MiB**, whether or not D-FINE is present. The free public Render setup currently has `INSTALL_WHISPER=0`, so this synthetic stress-test failure does **not prove an outage of the existing public editor**. Even if memory were resolved, D-FINE Objects365 remains blocked by upstream research-only usage terms. The exact readings are saved in [the JSON result register](gym-detector-benchmark-results.json).
+
 ## Hard release criteria
 
 A model may only be considered for the public Render Free backend after the following are independently verified:
