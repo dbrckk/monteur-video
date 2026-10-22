@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "updated_utc": "2026-10-22",
+  "goal": "Commercial-capable monetizable automatic gym video editor. Track provenance of weights and underlying training datasets separately.",
+  "production_weights": [
+    {
+      "component": "MediaPipe Pose Landmarker Lite",
+      "source_url": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+      "distribution": "Docker default",
+      "role": "human body landmarks",
+      "framework_license": "Apache-2.0 (MediaPipe framework)",
+      "weight_provenance_status": "review_training_and_model_specific_terms",
+      "commercial_clearance": "pending_manual_review",
+      "fail_safe": "motion_then_center"
+    },
+    {
+      "component": "MobileNetV2-12 ImageNet classifier",
+      "source_url": "https://huggingface.co/onnxmodelzoo/mobilenetv2-12",
+      "sha256": "c0c3f76d93fa3fd6580652a45618618a220fced18babf65774ed169de0432ad5",
+      "distribution": "Docker default",
+      "role": "classify dumbbell at visible wrists",
+      "weight_card_license": "Apache-2.0",
+      "underlying_dataset": "ImageNet ILSVRC 2012",
+      "dataset_terms_url": "https://www.image-net.org/download",
+      "dataset_terms_summary": "ImageNet dataset access is restricted to noncommercial research and education. Applicability of dataset access terms to separately distributed pretrained weights requires independent assessment.",
+      "commercial_clearance": "pending_manual_review",
+      "fail_safe": "pose_and_geometry_without_classifier",
+      "runtime_switch": "MONTEUR_DUMBBELL_CLASSIFIER=0",
+      "docker_build_switch": "INSTALL_DUMBBELL=0"
+    }
+  ],
+  "research_only": [
+    {
+      "component": "D-FINE-S FP32 Objects365 checkpoint",
+      "source_url": "https://huggingface.co/onnx-community/dfine_s_obj365-ONNX",
+      "revision": "a61e4cdfe4f9d3188a305d91e37dbf38688ffbb8",
+      "sha256": "372feaa33ac6ba67d7df8589628f6abc395b3c6981c4edc70dfcfe2949751120",
+      "dataset": "Objects365",
+      "dataset_terms_url": "https://www.objects365.org/download.html",
+      "dataset_terms_summary": "Academic purpose only; pretrained checkpoint commercial rights not established.",
+      "commercial_clearance": "blocked_for_release",
+      "engineering_qualification": "failed_fullstack_512MiB_memory_peak",
+      "never_ship_public": true
+    }
+  ],
+  "future_data_sources": [
+    {
+      "source": "Open Images V7",
+      "url": "https://storage.googleapis.com/openimages/web/factsfigures_v7.html",
+      "annotation_license": "CC BY 4.0",
+      "listed_image_license": "CC BY 2.0",
+      "publisher_warning": "Google does not warrant the license status of each original photo; verify rights individually.",
+      "usage_rule": "Only use individually verified images with retained attribution/source/license and explicit commercial allowances.",
+      "models": "Future original trained detector, not a shortcut to inherit rights from third-party checkpoints."
+    },
+    {
+      "source": "Original or synthetically generated gym images",
+      "usage_rule": "Document photographer/creator consent, branding/identifiable persons permissions where relevant, and owned commercial redistribution/training rights before use."
+    }
+  ],
+  "release_policy": "A model code license alone does not establish rights to the source dataset or inherited weights. Do not automatically declare commercially cleared without separate review.",
+  "links": [
+    "https://www.image-net.org/download",
+    "https://storage.googleapis.com/openimages/web/factsfigures_v7.html",
+    "https://www.objects365.org/download.html",
+    "https://github.com/Peterande/D-FINE"
+  ]
+}
