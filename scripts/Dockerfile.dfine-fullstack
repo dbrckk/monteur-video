@@ -1,0 +1,11 @@
+# Sandbox-only layer built FROM the exact production Dockerfile image.
+# It is never used by the Render deployment or the real public API.
+FROM monteur-v1:fullstack-base
+USER root
+RUN pip install --no-cache-dir onnxruntime==1.23.2
+COPY scripts/benchmark_dfine_cpu.py scripts/benchmark_dfine_fullstack.py ./scripts/
+RUN chmod a+r ./scripts/benchmark_dfine_cpu.py ./scripts/benchmark_dfine_fullstack.py
+USER appuser
+ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+    TOKENIZERS_PARALLELISM=false
+ENTRYPOINT ["python", "-m", "scripts.benchmark_dfine_fullstack"]

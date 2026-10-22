@@ -1,0 +1,75 @@
+name: Research-only D-FINE full-stack 512MiB gate
+on:
+  pull_request:
+    paths:
+      - 'scripts/benchmark_dfine_fullstack.py'
+      - 'scripts/Dockerfile.dfine-fullstack'
+      - 'scripts/benchmark_dfine_cpu.py'
+      - '.github/workflows/gym-detector-fullstack.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-stack-memory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build real production CPU image with Whisper
+        run: docker build --build-arg INSTALL_WHISPER=1 -t monteur-v1:fullstack-base .
+      - name: Add research-only ONNX Runtime and D-FINE probe
+        run: docker build -f scripts/Dockerfile.dfine-fullstack -t monteur-v1:dfine-fullstack-probe .
+      - name: Run genuine backend and FFmpeg with all models under 512MiB
+        shell: bash
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=10s 320s docker run --rm \
+            --memory=512m --memory-swap=512m --cpus=0.10 --pids-limit=128 \
+            --security-opt=no-new-privileges --network=bridge \
+            monteur-v1:dfine-fullstack-probe > dfine-fullstack.log 2>&1
+          RESULT=$?
+          set -e
+          cat dfine-fullstack.log
+          echo "Docker process exit: $RESULT" >> "$GITHUB_STEP_SUMMARY"
+          if grep -q 'FULLSTACK_BENCHMARK_JSON=' dfine-fullstack.log; then
+            sed -n 's/^FULLSTACK_BENCHMARK_JSON=//p' dfine-fullstack.log | tail -n 1 > dfine-fullstack.json
+          else
+            printf '{"status":"not_qualified","reason":"process_exit_or_oom_or_timeout","exit_code":%s,"production_enabled":false,"commercial_use_approved":false}\n' "$RESULT" > dfine-fullstack.json
+          fi
+          python3 - <<'PY'
+          import json
+          with open('dfine-fullstack.json',encoding='utf-8') as f:
+              value=json.load(f)
+          msg=[
+              "## D-FINE full-stack validation",
+              "",
+              "**Research only: NOT deployed.**",
+              "**Objects365 academic-only terms: commercial use not cleared.**",
+              "",
+              "- Candidate: "+str(value.get("source","D-FINE Small Objects365")),
+              "- Engineering status: **"+str(value["status"])+"**",
+              "- Peak 512-MiB cgroup usage: "+str(value.get("observed_cgroup_peak_mib",value.get("last_memory",{}).get("container_peak_mib")))+" MiB",
+              "- Reserve: "+str(value.get("reserve_mib"))+" MiB",
+              "- Elapsed: "+str(value.get("duration_seconds"))+" s",
+              "- Failure: "+str(value.get("error",value.get("reason","none"))),
+              "- Completed stages: "+str([x["stage"] for x in value.get("stages",[])]),
+              "",
+              "A passing CI workflow means the experiment and report finished, not that model weights are eligible for production."
+          ]
+          with open('dfine-fullstack-report.md','w',encoding='utf-8') as f:
+              f.write("\n".join(msg)+"\n")
+          print("\n".join(msg))
+          PY
+          cat dfine-fullstack-report.md >> "$GITHUB_STEP_SUMMARY"
+          # An OOM, timeout, incompatible model, or rights blocker remains
+          # a documented NOT QUALIFIED experiment, not a production release.
+      - name: Publish complete full-stack benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dfine-fullstack-512m-01cpu-evidence
+          path: |
+            dfine-fullstack.json
+            dfine-fullstack.log
+            dfine-fullstack-report.md
+          retention-days: 30

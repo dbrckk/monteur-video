@@ -22,6 +22,31 @@ The GitHub Actions workflow `gym-detector-benchmark.yml` automatically runs on a
 
 Synthetic frames prove **runtime compatibility only**. They do not measure false detections, gym equipment visibility or visual accuracy. Real footage would still be required.
 
+## Official licensing decision — 22 October 2026
+
+The **Objects365 official download conditions** explicitly state that the dataset is "available for the academic purpose only". Its annotations/website have a CC BY 4.0 provision, but the Images section separately disclaims ownership of image copyrights. The D-FINE official README warns that `*_obj365`/`*_obj2coco` pretrained checkpoints **must not be assumed commercially cleared**. A published maintainer clarification request ([D-FINE issue #357](https://github.com/Peterande/D-FINE/issues/357)) also describes the checkpoint rights as unresolved.
+
+Primary sources:
+- [Objects365 Consortium official terms](https://www.objects365.org/download.html)
+- [Upstream D-FINE licensing notice](https://github.com/Peterande/D-FINE)
+- [D-FINE checkpoint rights clarification issue](https://github.com/Peterande/D-FINE/issues/357)
+
+**Decision for Monteur Studio:** Objects365-derived D-FINE checkpoints remain **research-only and not shipped in any commercial/public runtime** without explicit independent commercial clearance. The Apache-2.0 notice for D-FINE source code does not, by itself, override upstream dataset or image-use constraints. This is a conservative release decision, not a legal determination that *every* derivative checkpoint is prohibited.
+
+## Full production-stack engineering benchmark
+
+The separate workflow [`gym-detector-fullstack.yml`](../.github/workflows/gym-detector-fullstack.yml) builds the **actual production Dockerfile with faster-whisper installed**, then builds a disposable extra layer containing ONNX Runtime and this D-FINE model. It operates inside a strict **512 MiB / 0.1 CPU** Docker cgroup with D-FINE, MediaPipe, MobileNet, Whisper tiny, the actual uvicorn/FastAPI server health endpoint, and a real FFmpeg portrait MP4 render. All tasks share the same memory budget and models stay resident during the render. The runtime records memory after each stage; a peak greater than **420 MiB** fails the engineering reserve gate, and an OOM/timeout is reported explicitly as *not qualified*.
+
+This simulates the paid features conservatively on tiny/synthetic inputs, **not a full real-world batch of rushes**; production rights and verified gym-clip accuracy remain required even after an engineering pass. An engineering failure never automatically causes deployment changes.
+
+## Full-stack benchmark result (22 October 2026): NOT QUALIFIED
+
+In the first isolated full-stack run, the exact Whisper-enabled production image plus the experimental D-FINE weights reached the **512 MiB Docker cgroup memory ceiling** at the `faster-whisper tiny loaded` stage. The memory trace recorded **304.9 MiB peak after D-FINE + MediaPipe + MobileNet**, and **512.0 MiB peak after initializing Whisper Tiny**, before completing transcription, the actual API health test or FFmpeg export. The attempted transcription then failed with `TypeError: open() got an unexpected keyword argument 'metadata_errors'`; that software error is separate from the memory ceiling, and a complete video rendering benchmark was **not** achieved. Source evidence: [GitHub Actions full-stack run 39795106007](https://github.com/dbrckk/monteur-video/actions/runs/39795106007) and [persisted results](gym-detector-benchmark-results.json).
+
+**Decision:** D-FINE-S Objects365 must not be enabled on Render Free, for **two independent reasons**: (1) official Objects365 academic-only dataset conditions, with no demonstrated commercial clearance for derived pretrained checkpoint weights; and (2) measured memory saturation once Whisper joined the video inference stack. The earlier 286.8-MiB three-model result was a useful partial benchmark but **not** a production viability proof. We will not represent this candidate as deployable, even if an isolated Actions job itself completes successfully.
+
+**Next commercially practical approach:** retain the currently deployed MediaPipe + MobileNet + conservative geometric equipment framing; evaluate independent fully rights-cleared smaller detectors (or fine-tune on specifically commercially licensed original/synthetic gym clips) on a separate machine and use them only if full pipeline memory/accuracy gates succeed. Apache-2.0 on a model *card* alone does not establish the provenance of training data or inherited base weights.
+
 ## Hard release criteria
 
 A model may only be considered for the public Render Free backend after the following are independently verified:
