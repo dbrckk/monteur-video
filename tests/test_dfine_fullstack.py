@@ -45,10 +45,12 @@ class DfineFullstackSafetyTests(unittest.TestCase):
         self.assertFalse(doc["fullstack_initial_512m_01cpu_probe"]["production_enabled"])
         self.assertEqual(doc["fullstack_initial_512m_01cpu_probe"]["actual_cgroup_peak_mib"], 512.0)
         comparison = doc["fullstack_ab_512m_01cpu_probe"]
-        self.assertEqual(comparison["baseline_peak_mib"], 512)
+        self.assertEqual(comparison["baseline_peak_mib"], 454.4)
         self.assertEqual(comparison["candidate_peak_mib"], 512)
         self.assertFalse(comparison["comparison_valid"])
         self.assertIsNone(comparison["detector_incremental_peak_mib"])
+        self.assertTrue(comparison["api_health_test"])
+        self.assertEqual(comparison["transcription_test"], "passed_with_pyav17")
 
     def test_no_research_weights_are_cleared_for_commercial_release(self):
         rights = json.loads((PROJECT / "docs" /
