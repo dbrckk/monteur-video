@@ -1,2 +1,6 @@
 -r requirements.txt
 faster-whisper>=1.1,<2
+# faster-whisper 1.2.1 passes metadata_errors to av.open; PyAV >=18 removed
+# that kwarg. Use the last tested compatible PyAV major until upstream fixes
+# are included in a tagged stable faster-whisper release.
+av>=17.1,<18
