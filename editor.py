@@ -6,6 +6,7 @@ import math
 import os
 import re
 import subprocess
+from tempfile import TemporaryDirectory
 from functools import lru_cache
 from datetime import datetime, timezone
 from dataclasses import dataclass
@@ -415,8 +416,7 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
            source_dimensions: tuple[int, int] | None = None) -> None:
     if not clips:
         raise ValueError("Aucun passage utilisable.")
-    work = destination.parent / "segments"
-    work.mkdir(parents=True, exist_ok=True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
     w, h = (size, size * 16 // 9) if vertical else (size * 16 // 9, size)
     if w % 2 or h % 2:
         raise ValueError("Dimensions de sortie non paires.")
@@ -425,69 +425,85 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
     if vertical and source_dimensions is None:
         media = probe_media(source)
         source_dimensions = (media["width"], media["height"])
-    reframes = []
-    files = []
-    for i, clip in enumerate(clips):
-        part = work / f"{i:04}.mp4"
-        if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0":
-            plan = (plan_pose_reframe(source, clip.start, clip.duration,
-                                      *source_dimensions)
-                    or plan_vertical_reframe(source, clip.start, clip.duration,
-                                             *source_dimensions))
-            crop_x = ffmpeg_crop_x(plan)
-            reframes.append(plan)
-        else:
-            crop_x = "(iw-ow)/2"
-        if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0" and plan.mode in {
-                "equipment_safe", "wide_grip_safe", "grip_edge_safe",
-                "dumbbell_safe", "composition_safe"}:
-            # Wide bars, grips or a visible hand outside the proposed crop
-            # cannot safely fit 9:16. Preserve the entire source over a
-            # blurred fill rather than cutting hands or nearby equipment.
-            scaling = (f"split=2[wide_bg][wide_fg];"
-                       f"[wide_bg]scale={w}:{h}:force_original_aspect_ratio=increase,"
-                       f"crop={w}:{h},boxblur=10:1[soft_bg];"
-                       f"[wide_fg]scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                       f"setsar=1[full_shot];"
-                       "[soft_bg][full_shot]overlay=(W-w)/2:(H-h)/2:shortest=1,"
-                       "setsar=1")
-        else:
-            scaling = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
-                       f"crop={w}:{h}:{crop_x}:(ih-oh)/2,setsar=1")
-        clip_filter = shot_filters[i] if shot_filters is not None else grade_filter
-        if clip_filter:
-            scaling += "," + clip_filter
-        ass = work / f"{i:04}.ass"
-        if create_captions(ass, clip, transcript, vertical):
-            # Segments are named with UUID parent / numeric basename: safe for FFmpeg quoting.
-            scaling += f",subtitles={ass.as_posix()}"
-        command = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
-                   "-ss", str(clip.start), "-i", str(source)]
-        if not has_audio:
-            command += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
-        # Phone microphones sometimes stop before the video track. Without
-        # padding, -shortest silently truncates the picture at the audio EOF.
-        # Preserve the requested clip length and fill only missing audio with silence.
-        audio_fade = (f"apad=whole_dur={clip.duration:.3f},"
-                      f"atrim=duration={clip.duration:.3f},"
-                      f"afade=t=in:st=0:d=0.06,"
-                      f"afade=t=out:st={max(0.06, clip.duration - 0.08):.3f}:d=0.08")
-        command += ["-t", str(clip.duration), "-map", "0:v:0",
-                    "-map", "0:a:0" if has_audio else "1:a:0",
-                    "-vf", scaling, "-af", audio_fade, "-r", "30", "-c:v", "libx264",
-                    "-threads", "2", "-preset", "veryfast", "-crf", "20",
-                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
-                    "-ar", "48000", "-ac", "2",
-                    "-map_metadata", "-1", "-shortest", str(part)]
-        execute(command, timeout=600)
-        files.append(part)
-        if progress:
-            progress(0.40 + (i + 1) / len(clips) * 0.52, "render")
-    concat = work / "concat.txt"
-    concat.write_text("".join(f"file '{p.name}'\n" for p in files), encoding="utf-8")
-    execute(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
-             "-f", "concat", "-safe", "0", "-i", str(concat),
-             "-c", "copy", "-movflags", "+faststart", str(destination)], timeout=180)
+    # Unique workspace prevents stale segments, collisions across renders and
+    # disk exhaustion on temporary Render storage. Removed even on failure.
+    with TemporaryDirectory(prefix=f".{destination.stem}-segments-",
+                            dir=destination.parent) as scratch:
+        work = Path(scratch)
+        reframes = []
+        files = []
+        for i, clip in enumerate(clips):
+            part = work / f"{i:04}.mp4"
+            if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0":
+                plan = (plan_pose_reframe(source, clip.start, clip.duration,
+                                          *source_dimensions)
+                        or plan_vertical_reframe(source, clip.start, clip.duration,
+                                                 *source_dimensions))
+                crop_x = ffmpeg_crop_x(plan)
+                reframes.append(plan)
+            else:
+                crop_x = "(iw-ow)/2"
+            if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0" and plan.mode in {
+                    "equipment_safe", "wide_grip_safe", "grip_edge_safe",
+                    "dumbbell_safe", "composition_safe"}:
+                # Wide bars, grips or a visible hand outside the proposed crop
+                # cannot safely fit 9:16. Preserve the entire source over a
+                # blurred fill rather than cutting hands or nearby equipment.
+                scaling = (f"split=2[wide_bg][wide_fg];"
+                           f"[wide_bg]scale={w}:{h}:force_original_aspect_ratio=increase,"
+                           f"crop={w}:{h},boxblur=10:1[soft_bg];"
+                           f"[wide_fg]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                           f"setsar=1[full_shot];"
+                           "[soft_bg][full_shot]overlay=(W-w)/2:(H-h)/2:shortest=1,"
+                           "setsar=1")
+            else:
+                scaling = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+                           f"crop={w}:{h}:{crop_x}:(ih-oh)/2,setsar=1")
+            clip_filter = shot_filters[i] if shot_filters is not None else grade_filter
+            if clip_filter:
+                scaling += "," + clip_filter
+            ass = work / f"{i:04}.ass"
+            if create_captions(ass, clip, transcript, vertical):
+                # Segments are named with UUID parent / numeric basename: safe for FFmpeg quoting.
+                scaling += f",subtitles={ass.as_posix()}"
+            command = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+                       "-ss", str(clip.start), "-i", str(source)]
+            if not has_audio:
+                command += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+            # Phone microphones sometimes stop before the video track. Without
+            # padding, -shortest silently truncates the picture at the audio EOF.
+            # Preserve the requested clip length and fill only missing audio with silence.
+            audio_fade = (f"apad=whole_dur={clip.duration:.3f},"
+                          f"atrim=duration={clip.duration:.3f},"
+                          f"afade=t=in:st=0:d=0.06,"
+                          f"afade=t=out:st={max(0.06, clip.duration - 0.08):.3f}:d=0.08")
+            command += ["-t", str(clip.duration), "-map", "0:v:0",
+                        "-map", "0:a:0" if has_audio else "1:a:0",
+                        "-vf", scaling, "-af", audio_fade, "-r", "30", "-c:v", "libx264",
+                        "-threads", "2", "-preset", "veryfast", "-crf", "20",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+                        "-ar", "48000", "-ac", "2",
+                        "-map_metadata", "-1", "-shortest", str(part)]
+            execute(command, timeout=600)
+            files.append(part)
+            if progress:
+                progress(0.40 + (i + 1) / len(clips) * 0.52, "render")
+        concat = work / "concat.txt"
+        concat.write_text("".join(f"file '{p.name}'\n" for p in files), encoding="utf-8")
+        staged = work / "assembled.mp4"
+        execute(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+                 "-f", "concat", "-safe", "0", "-i", str(concat),
+                 "-c", "copy", "-movflags", "+faststart", str(staged)], timeout=180)
+        # A process exit code alone cannot guarantee an intact, usable MP4.
+        # Validate inside the isolated workspace before replacing an old export.
+        verified = probe_media(staged)
+        expected_seconds = sum(clip.duration for clip in clips)
+        if ((verified["width"], verified["height"]) != (w, h)
+                or not verified["has_audio"]
+                or abs(verified["duration"] - expected_seconds) >
+                max(0.40, expected_seconds * 0.05)):
+            raise RuntimeError("MP4 final invalide : dimensions, son ou durée incohérents")
+        os.replace(staged, destination)
     metadata["rendered_duration_seconds"] = round(sum(c.duration for c in clips), 2)
     metadata["auto_reframe"] = {
         "enabled": vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0",
