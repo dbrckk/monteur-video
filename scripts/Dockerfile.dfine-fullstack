@@ -8,4 +8,4 @@ RUN chmod a+r ./scripts/benchmark_dfine_cpu.py ./scripts/benchmark_dfine_fullsta
 USER appuser
 ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
     TOKENIZERS_PARALLELISM=false
-ENTRYPOINT ["python", "scripts/benchmark_dfine_fullstack.py"]
+ENTRYPOINT ["python", "-m", "scripts.benchmark_dfine_fullstack"]
