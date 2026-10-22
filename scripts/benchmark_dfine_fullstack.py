@@ -25,6 +25,8 @@ MODEL_SHA256 = "372feaa33ac6ba67d7df8589628f6abc395b3c6981c4edc70dfcfe2949751120
 MODEL_MAX_BYTES = 45_000_000
 CGROUP_LIMIT_MIB = 512
 QUALIFICATION_PEAK_MIB = 420
+# A/B control: identical backend and models without loading D-FINE.
+BASELINE_NO_DETECTOR = os.environ.get("MONTEUR_BENCH_NO_DFINE", "0") == "1"
 EXPECTED_OUTPUT_SHAPES = ((1, 300, 366), (1, 300, 4))
 
 
@@ -118,7 +120,8 @@ def run() -> dict:
         "production_enabled": False,
         "commercial_use_approved": False,
         "license_gate": "blocked_academic_only_Objects365_terms",
-        "source": MODEL_REPO,
+        "source": MODEL_REPO if not BASELINE_NO_DETECTOR else "production_without_dfine",
+        "comparison_arm": "baseline" if BASELINE_NO_DETECTOR else "candidate_dfine",
         "source_revision": MODEL_REVISION,
         "weights_sha256": MODEL_SHA256,
         "memory_limit_mib": CGROUP_LIMIT_MIB,
@@ -137,25 +140,30 @@ def run() -> dict:
 
         _record(result, "dependencies_loaded")
 
-        weights = _download_detector()
-        _record(result, "dfine_model_downloaded_and_verified")
+        if BASELINE_NO_DETECTOR:
+            detector = None
+            detected = None
+            _record(result, "dfine_not_loaded_control_arm")
+        else:
+            weights = _download_detector()
+            _record(result, "dfine_model_downloaded_and_verified")
 
-        options = ort.SessionOptions()
-        options.intra_op_num_threads = 1
-        options.inter_op_num_threads = 1
-        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
-        options.enable_mem_pattern = False
-        options.enable_cpu_mem_arena = False
-        detector = ort.InferenceSession(
-            str(weights), sess_options=options,
-            providers=["CPUExecutionProvider"])
-        inputs = detector.get_inputs()
-        if len(inputs) != 1 or inputs[0].name != "pixel_values":
-            raise ValueError("Unexpected detector model input")
-        image = np.zeros(_tensor_shape(inputs[0].shape), np.float32)
-        detected = detector.run(None, {"pixel_values": image})
-        _assert_evidence(detected)
-        _record(result, "dfine_cpu_inference")
+            options = ort.SessionOptions()
+            options.intra_op_num_threads = 1
+            options.inter_op_num_threads = 1
+            options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
+            options.enable_mem_pattern = False
+            options.enable_cpu_mem_arena = False
+            detector = ort.InferenceSession(
+                str(weights), sess_options=options,
+                providers=["CPUExecutionProvider"])
+            inputs = detector.get_inputs()
+            if len(inputs) != 1 or inputs[0].name != "pixel_values":
+                raise ValueError("Unexpected detector model input")
+            image = np.zeros(_tensor_shape(inputs[0].shape), np.float32)
+            detected = detector.run(None, {"pixel_values": image})
+            _assert_evidence(detected)
+            _record(result, "dfine_cpu_inference")
 
         pose = mp.tasks.vision.PoseLandmarker.create_from_model_path(
             os.environ["MONTEUR_POSE_MODEL"])
@@ -205,8 +213,10 @@ def run() -> dict:
         result["engineering_fit"] = (
             result["observed_cgroup_peak_mib"] is not None
             and result["observed_cgroup_peak_mib"] <= QUALIFICATION_PEAK_MIB)
-        result["status"] = ("engineering_benchmark_passed_rights_blocked"
-                            if result["engineering_fit"] else "not_qualified")
+        result["status"] = (
+            ("baseline_passed" if BASELINE_NO_DETECTOR
+             else "engineering_benchmark_passed_rights_blocked")
+            if result["engineering_fit"] else "not_qualified")
     except Exception as exc:
         result["error"] = f"{type(exc).__name__}: {str(exc)[:380]}"
         result["status"] = "not_qualified"
@@ -229,5 +239,5 @@ if __name__ == "__main__":
     answer = run()
     print("FULLSTACK_BENCHMARK_JSON=" +
           json.dumps(answer, ensure_ascii=False, sort_keys=True), flush=True)
-    sys.exit(0 if answer["status"] ==
-             "engineering_benchmark_passed_rights_blocked" else 2)
+    sys.exit(0 if answer["status"] in {
+        "engineering_benchmark_passed_rights_blocked", "baseline_passed"} else 2)
