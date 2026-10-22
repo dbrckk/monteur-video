@@ -458,11 +458,15 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                                         for d in details),
             "dumbbell_safe_clips": sum(d["auto_reframe"].get("dumbbell_safe_clips", 0)
                                        for d in details),
+            "composition_guided_clips": sum(d["auto_reframe"].get("composition_guided_clips", 0)
+                                             for d in details),
+            "composition_safe_clips": sum(d["auto_reframe"].get("composition_safe_clips", 0)
+                                           for d in details),
             "motion_guided_clips": sum(d["auto_reframe"].get("motion_guided_clips", 0)
                                        for d in details),
             "center_fallback_clips": sum(d["auto_reframe"].get("center_fallback_clips", 0)
                                          for d in details),
-            "strategy": "pose_and_dumbbell_grip_guard_then_motion_then_center",
+            "strategy": "visible_body_and_gear_bounds_then_pose_and_motion",
             "smooth_interpolation": True,
         },
         "music_profile": music_profile,
