@@ -23,6 +23,8 @@ Les anciennes instances `monteur-video-beta` et `monteur-video-hd` ne sont plus 
 
 Lors de chaque encodage, Monteur Studio crée un **répertoire de segments unique et isolé**, même quand plusieurs montages sont lancés dans le même dossier. Tous les extraits, sous-titres ASS et fichiers de concaténation restent dans ce dossier éphémère. Après assemblage, FFprobe vérifie **la durée, les dimensions de sortie et la présence d'une piste audio** avant la publication du MP4 final. Le résultat n'est remplacé qu'avec un **renommage atomique** sur le même système de fichiers ; un échec d'encodage ou de vérification ne peut donc plus écraser un export précédent utilisable. Le dossier temporaire est automatiquement supprimé, même si FFmpeg échoue.
 
+L'assemblage de **plusieurs rushs** dispose lui aussi de son propre répertoire temporaire, avec suppression automatique de tous les MP4 intermédiaires après validation de l'export final. L'assemblage est également vérifié par FFprobe et publié de façon atomique, ce qui protège le MP4 précédent en cas d'échec de concaténation.
+
 Cette amélioration réduit l'accumulation des fichiers intermédiaires entre les rushs sur le stockage éphémère de Render. Elle ne rend pas ce stockage persistant et ne garantit pas qu'un très gros fichier vidéo rentre dans l'espace disponible. La qualité d'encodage reste en H.264/AAC, sans dégradation volontaire ni compression supplémentaire.
 
 ## Montage automatique cohérent et suivi de progression
