@@ -53,8 +53,44 @@
       "commercial weight rights"
     ]
   },
-  "release_decision": "HOLD: Full-stack and commercial Objects365 rights validation required before enabling real object box detection.",
+  "release_decision": "BLOCK: Official Objects365 academic-only terms and full-stack benchmark reached 512 MiB before FFmpeg/API. Keep D-FINE off public Render image.",
   "evidence": {
     "github_workflow_run": "https://github.com/dbrckk/monteur-video/actions/runs/39789036538"
+  },
+  "fullstack_initial_512m_01cpu_probe": {
+    "workflow_run": "https://github.com/dbrckk/monteur-video/actions/runs/39795106007",
+    "source_commit": "91491046ddcd2f51d0ccf3019cc72817d2ad0ffc",
+    "status": "not_qualified",
+    "commercial_rights_approved": false,
+    "production_enabled": false,
+    "target_memory_ceiling_mib": 512,
+    "target_headroom_gate_mib": 420,
+    "stages": [
+      {
+        "stage": "D-FINE FP32 actual inference",
+        "cgroup_peak_mib": 304.9
+      },
+      {
+        "stage": "MediaPipe + MobileNet co-resident",
+        "cgroup_peak_mib": 304.9
+      },
+      {
+        "stage": "Whisper tiny initialized",
+        "cgroup_peak_mib": 512
+      },
+      {
+        "stage": "Transcription on synthetic audio",
+        "status": "failed",
+        "error": "TypeError: open() got an unexpected keyword argument 'metadata_errors'"
+      },
+      {
+        "stage": "Real FastAPI health and concurrent FFmpeg export",
+        "status": "not_reached"
+      }
+    ],
+    "actual_cgroup_peak_mib": 512,
+    "measured_as_cgroup_peak": true,
+    "caution": "Memory ceiling reached by model co-residency before a complete transcribe/API/FFmpeg render. User uploads are never sent to this research-only tool.",
+    "release_decision": "HOLD: engineering memory budget failed AND upstream Objects365 dataset academic-only rights unapproved."
   }
 }
