@@ -1,0 +1,12 @@
+# Separate experiment only: never imported into Monteur Studio's Render image.
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1
+WORKDIR /bench
+# Match system libraries used by production MediaPipe/OpenCV wheels.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 libglib2.0-0 libxcb1 libxext6 libxrender1 libsm6 \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir numpy==2.2.6 onnxruntime==1.23.2 mediapipe==0.10.32
+COPY scripts/benchmark_dfine_cpu.py ./benchmark_dfine_cpu.py
+COPY scripts/download_pose_model.py scripts/download_dumbbell_model.py ./scripts/
+ENTRYPOINT ["python", "benchmark_dfine_cpu.py"]

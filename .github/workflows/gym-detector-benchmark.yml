@@ -1,0 +1,63 @@
+name: Isolated D-FINE-S gym detection feasibility
+on:
+  pull_request:
+    paths:
+      - 'scripts/benchmark_dfine_cpu.py'
+      - 'scripts/Dockerfile.dfine-bench'
+      - 'tests/test_dfine_benchmark.py'
+      - '.github/workflows/gym-detector-benchmark.yml'
+  workflow_dispatch:
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated ONNX-only test image
+        run: docker build -f scripts/Dockerfile.dfine-bench -t dfine-benchmark:ci .
+      - name: Run under Render-like 512MiB and 0.1 CPU limits
+        shell: bash
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=5s 230s docker run --rm \
+            --memory=512m --memory-swap=512m --cpus=0.10 --pids-limit=128 \
+            --network=bridge --security-opt=no-new-privileges \
+            dfine-benchmark:ci > dfine-benchmark.log 2>&1
+          EXIT_CODE=$?
+          set -e
+          cat dfine-benchmark.log
+          echo "process_exit_code=$EXIT_CODE" >> "$GITHUB_STEP_SUMMARY"
+          if grep -q 'BENCHMARK_JSON=' dfine-benchmark.log; then
+            sed -n 's/^BENCHMARK_JSON=//p' dfine-benchmark.log | tail -n 1 > dfine-benchmark.json
+          else
+            printf '{"status":"not_qualified","reason":"timeout_or_process_failure","process_exit_code":%s,"production_enabled":false,"commercial_training_data_review_required":true}\n' "$EXIT_CODE" > dfine-benchmark.json
+          fi
+          python3 - <<'PY'
+          import json
+          report=json.load(open('dfine-benchmark.json',encoding='utf8'))
+          print("Benchmark status:",report["status"])
+          print("Peak memory:",report.get("runtime_memory"))
+          print("Inference time:",report.get("inference_seconds_at_limited_cpu"))
+          print("NOTE: successful engineering benchmark does not clear Objects365 training-data rights")
+          with open("dfine-benchmark-summary.md","w",encoding="utf8") as f:
+              f.write("## D-FINE-S ONNX isolated assessment\n\n")
+              f.write("- Model is **NOT in production**; commercial Objects365 terms not cleared.\n")
+              f.write("- Status: **"+str(report["status"])+"**\n")
+              f.write("- Cgroup memory: "+str(report.get("runtime_memory"))+"\n")
+              f.write("- Inference at 0.1 CPU: "+str(report.get("inference_seconds_at_limited_cpu"))+" sec\n")
+          PY
+          cat dfine-benchmark-summary.md >> "$GITHUB_STEP_SUMMARY"
+          # A failed *model candidate* is a valid benchmark outcome; it is
+          # explicitly recorded as not qualified and never shipped.
+      - name: Publish inspectable benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dfine-small-512mb-cpu-benchmark
+          path: |
+            dfine-benchmark.json
+            dfine-benchmark.log
+            dfine-benchmark-summary.md
+          retention-days: 30

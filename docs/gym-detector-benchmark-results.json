@@ -1,0 +1,60 @@
+{
+  "date_utc": "2026-10-22",
+  "model": "onnx-community/dfine_s_obj365-ONNX",
+  "hf_revision": "a61e4cdfe4f9d3188a305d91e37dbf38688ffbb8",
+  "environment": {
+    "cgroup_memory_limit_mib": 512,
+    "cpu_limit_cores": 0.1
+  },
+  "targets": {
+    "1": "Person",
+    "323": "Dumbbell",
+    "332": "Treadmill",
+    "349": "Barbell"
+  },
+  "int8": {
+    "file": "onnx/model_int8.onnx",
+    "size_bytes": 11333721,
+    "sha256": "3355fe77be41bca48937cd5bb100de51e1bfd894e67275f6d398cfda35624838",
+    "qualified": false,
+    "error": "ONNXRuntime ConvInteger(10) NOT_IMPLEMENTED"
+  },
+  "fp32": {
+    "file": "onnx/model.onnx",
+    "size_bytes": 42123225,
+    "sha256": "372feaa33ac6ba67d7df8589628f6abc395b3c6981c4edc70dfcfe2949751120",
+    "dfine_only_cgroup_peak_mib": 242.5,
+    "combined_model_cgroup_peak_mib": 286.8,
+    "memory_remaining_within_cgroup_mib": 225.2,
+    "dfine_synthetic_inference_seconds": 2.3,
+    "combined_with": [
+      "MediaPipe Pose Landmarker Lite",
+      "ImageNet MobileNetV2-12"
+    ],
+    "outputs": {
+      "logits": [
+        1,
+        300,
+        366
+      ],
+      "pred_boxes": [
+        1,
+        300,
+        4
+      ]
+    },
+    "benchmark_passed": true,
+    "production_qualified": false,
+    "exclusions": [
+      "Whisper runtime",
+      "FFmpeg video rendering",
+      "API server",
+      "real-video accuracy benchmark",
+      "commercial weight rights"
+    ]
+  },
+  "release_decision": "HOLD: Full-stack and commercial Objects365 rights validation required before enabling real object box detection.",
+  "evidence": {
+    "github_workflow_run": "https://github.com/dbrckk/monteur-video/actions/runs/39789036538"
+  }
+}
