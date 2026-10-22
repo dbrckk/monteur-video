@@ -10,6 +10,8 @@ The upstream D-FINE Objects365 models include **Person (1), Dumbbell (323), Trea
 
 ## What the benchmark really does
 
+An initial **INT8** benchmark was executed on 22 October 2026. Model SHA-256 `3355fe77be41bca48937cd5bb100de51e1bfd894e67275f6d398cfda35624838` (11.33 MB) failed at ONNX Runtime model initialization because the CPU provider lacks a `ConvInteger(10)` implementation. It was recorded as **not qualified**, without changing production. A follow-up evaluation uses the Small model's **FP32** ONNX weights to test compatibility at the cost of larger memory demand. Benchmark artifacts retain both outcomes.
+
 The GitHub Actions workflow `gym-detector-benchmark.yml` automatically runs on a pull request changing this benchmark or via manual `workflow_dispatch`. It:
 
 1. Builds a separate Python/ONNX Runtime container. The default production engine gains **no** dependency or model.
