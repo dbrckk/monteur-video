@@ -77,7 +77,7 @@ def run() -> dict:
         "production_enabled": False,
         "commercial_training_data_review_required": True,
         "measured_under_512_mib": False,
-        "note": "FP32 fallback after INT8 ConvInteger runtime incompatibility; synthetic inference is not detection accuracy.",
+        "note": "Combined CPU model-load probe only, without FFmpeg/Whisper/uvicorn; not accuracy or commercial clearance.",
     }
     try:
         from numpy import float32, bool_ as np_bool, zeros, ones, isfinite
@@ -145,6 +145,35 @@ def run() -> dict:
              "finite": bool(isfinite(values).all())}
             for desc, values in zip(session.get_outputs(), output)
         ]
+        result["dfine_only_memory"] = _memory_mb()
+
+        # Keep D-FINE ONNX session and its arrays alive while testing real
+        # MediaPipe Pose + ImageNet MobileNet coexistence in one 512MiB cgroup.
+        # This mirrors the production crop inference stack, without importing
+        # Whisper (which may need even more memory during transcription).
+        import cv2
+        import mediapipe as mp
+        from scripts.download_pose_model import download as pose_download
+        from scripts.download_dumbbell_model import install as dumbbell_download
+        from numpy import uint8
+
+        pose_path = pose_download(pathlib.Path("/tmp/benchmark_pose.task"))
+        dumbbell_path = dumbbell_download(pathlib.Path("/tmp/benchmark_mobilenet.onnx"))
+        landmark = mp.tasks.vision.PoseLandmarker.create_from_model_path(str(pose_path))
+        picture = mp.Image(image_format=mp.ImageFormat.SRGB,
+                           data=zeros((180, 320, 3), dtype=uint8))
+        landmark.detect(picture)
+        classifier = cv2.dnn.readNetFromONNX(str(dumbbell_path))
+        classifier.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+        classifier.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+        classifier.setInput(zeros((1, 3, 224, 224), dtype=float32))
+        mobile_output = classifier.forward().reshape(-1)
+        if mobile_output.size != 1000 or not isfinite(mobile_output).all():
+            raise ValueError("Invalid existing ImageNet model output")
+        landmark.close()
+        result["combined_stack_includes"] = [
+            "D-FINE-S-FP32", "MediaPipe-Pose-Lite", "MobileNetV2-12"]
+        result["combined_excludes"] = ["FFmpeg render", "faster-whisper", "uvicorn"]
         result["runtime_memory"] = _memory_mb()
         result["total_seconds"] = round(time.monotonic() - started, 2)
         safe_memory = result["runtime_memory"]["container_peak_mib"]
