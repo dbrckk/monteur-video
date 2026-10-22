@@ -21,7 +21,7 @@ RUN if [ "$INSTALL_POSE" = "1" ]; then \
 RUN if [ "$INSTALL_POSE" = "1" ] && [ "$INSTALL_DUMBBELL" = "1" ]; then \
       python scripts/download_dumbbell_model.py; \
     fi
-COPY shot_composition.py dumbbell_classifier.py equipment_guard.py pose_reframe.py smart_reframe.py editor.py montage.py visual_quality.py color_grade.py action_story.py pose_evidence.py soundtrack.py reels_music.py server.py ./
+COPY shot_sampling.py shot_composition.py dumbbell_classifier.py equipment_guard.py pose_reframe.py smart_reframe.py editor.py montage.py visual_quality.py color_grade.py action_story.py pose_evidence.py soundtrack.py reels_music.py server.py ./
 COPY web/ ./web/
 RUN useradd -m -u 10001 appuser && mkdir -p /data && chown appuser:appuser /data
 USER appuser
