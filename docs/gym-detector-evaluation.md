@@ -10,14 +10,14 @@ The upstream D-FINE Objects365 models include **Person (1), Dumbbell (323), Trea
 
 ## What the benchmark really does
 
-An initial **INT8** benchmark was executed on 22 October 2026. Model SHA-256 `3355fe77be41bca48937cd5bb100de51e1bfd894e67275f6d398cfda35624838` (11.33 MB) failed at ONNX Runtime model initialization because the CPU provider lacks a `ConvInteger(10)` implementation. It was recorded as **not qualified**, without changing production. A follow-up evaluation uses the Small model's **FP32** ONNX weights to test compatibility at the cost of larger memory demand. Benchmark artifacts retain both outcomes.
+An initial **INT8** benchmark was executed on 22 October 2026. Model SHA-256 `3355fe77be41bca48937cd5bb100de51e1bfd894e67275f6d398cfda35624838` (11.33 MB) failed at ONNX Runtime model initialization because the CPU provider lacks a `ConvInteger(10)` implementation. It was recorded as **not qualified**, without changing production. The follow-up **FP32** ONNX model (immutable HF revision `a61e4cdfe4f9d3188a305d91e37dbf38688ffbb8`, SHA-256 `372feaa33ac6ba67d7df8589628f6abc395b3c6981c4edc70dfcfe2949751120`, 42.1 MB) passed an actual synthetic CPU inference: **2.8 seconds at 0.1 CPU, 242.9 MiB peak cgroup memory** for D-FINE alone. Inputs were `pixel_values`; outputs were `logits [1,300,366]` and `pred_boxes [1,300,4]`. This is a **detector output shape**, not validation of real sports footage. The expanded follow-up additionally loads the current MediaPipe + MobileNet models in the same limited container; its gate is **at most 420 MiB** to leave at least 92 MiB free. Even passing it would **not** certify the real FFmpeg + Whisper + API stack or the commercial weights rights. CI artifacts retain individual outcomes.
 
 The GitHub Actions workflow `gym-detector-benchmark.yml` automatically runs on a pull request changing this benchmark or via manual `workflow_dispatch`. It:
 
 1. Builds a separate Python/ONNX Runtime container. The default production engine gains **no** dependency or model.
 2. Runs inside Docker hard-limited to **512 MiB** container RAM, **0.1 CPU** and **128 processes/threads**.
 3. Resolves the model repository's immutable source SHA, verifies Objects365 class names and records the SHA-256 of the downloaded INT8 ONNX file.
-4. Inspects model inputs, runs actual CPU inference on a bounded synthetic 640×640 RGB input, validates finite scores and bounding-box-like outputs, and records inference wall time and RSS/cgroup memory peak.
+4. Inspects model inputs, runs actual CPU inference on a bounded synthetic 640×640 RGB input, validates finite scores and bounding-box-like outputs, then simultaneously loads/executes MediaPipe Pose and ImageNet MobileNet. Records inference wall time and RSS/cgroup memory peak, with a 420-MiB co-residency gate.
 5. Exports `dfine-benchmark.json`, raw logs and a short markdown report as an Actions artifact. A timeout, OOM kill, model parsing error, tensor mismatch, or out-of-budget process produces **not qualified**, without silently shipping a detector.
 
 Synthetic frames prove **runtime compatibility only**. They do not measure false detections, gym equipment visibility or visual accuracy. Real footage would still be required.
