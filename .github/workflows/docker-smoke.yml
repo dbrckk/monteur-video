@@ -11,6 +11,7 @@ on:
       - 'pose_reframe.py'
       - 'equipment_guard.py'
       - 'dumbbell_classifier.py'
+      - 'shot_composition.py'
       - 'scripts/download_dumbbell_model.py'
       - 'soundtrack.py'
       - 'montage.py'
