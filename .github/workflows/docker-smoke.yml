@@ -76,7 +76,31 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build production image with real faster-whisper installed
         run: docker build --build-arg INSTALL_WHISPER=1 -t monteur-v1:ai .
-      - name: Verify CPU ASR model can actually initialize
+      - name: Verify genuine audio decoding and CPU transcription
         run: |
-          docker run --rm --entrypoint python monteur-v1:ai \
-            -c "from faster_whisper import WhisperModel; m=WhisperModel('tiny', device='cpu', compute_type='int8'); print('CPU ASR OK')"
+          docker run --rm -i --entrypoint python monteur-v1:ai - <<'PY'
+          import av
+          import tempfile
+          import wave
+          from pathlib import Path
+          from faster_whisper.audio import decode_audio
+          from faster_whisper import WhisperModel
+
+          assert 17 <= int(av.__version__.split('.')[0]) < 18, av.__version__
+          with tempfile.TemporaryDirectory() as folder:
+              path = Path(folder) / 'quiet.wav'
+              with wave.open(str(path), 'wb') as wav:
+                  wav.setnchannels(1)
+                  wav.setsampwidth(2)
+                  wav.setframerate(16000)
+                  wav.writeframes(bytes(16000 * 2))
+              samples = decode_audio(str(path), sampling_rate=16000)
+              assert len(samples) == 16000, len(samples)
+              model = WhisperModel('tiny', device='cpu', compute_type='int8',
+                                   cpu_threads=1, num_workers=1)
+              segments, info = model.transcribe(
+                  str(path), language='fr', beam_size=1, best_of=1,
+                  vad_filter=False, condition_on_previous_text=False)
+              assert isinstance(list(segments), list)
+          print('Verified actual WAV decode + Whisper transcribe on CPU with PyAV', av.__version__)
+          PY

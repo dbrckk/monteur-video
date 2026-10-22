@@ -15,6 +15,8 @@ L'interface publique [Monteur Studio](https://dbrckk.github.io/monteur-video/) u
 - Le navigateur relance un transfert dont la session a disparu après un redémarrage ; si un montage retourne 404, il tente une nouvelle importation **une seule fois** tant que les fichiers sont encore sélectionnés. Après fermeture/rechargement de la page, il faut parfois sélectionner à nouveau les originaux.
 - **Important : le disque Render Free reste éphémère**, même avec ce déploiement stable. La mise en veille, un incident ou un redémarrage peuvent toujours faire disparaître les sources, les projets et les MP4 avant leur durée indicative d'expiration. **Cela ne remplace pas un stockage persistant**. Conserver les vidéos d'origine sur le téléphone et télécharger le résultat dès qu'il est disponible.
 
+**Compatibilité transcription facultative (octobre 2026) :** le moteur Docker construit avec `INSTALL_WHISPER=1` impose PyAV 17.x, car la version publiée de faster-whisper transmettait un argument `metadata_errors` non accepté par PyAV 18/19. Le test Docker effectue maintenant un vrai décodage WAV et une transcription Whisper CPU. L'image publique Render allégée (`INSTALL_WHISPER=0`) ne télécharge pas Whisper et reste inchangée. La présence de Whisper ne garantit pas qu'il tienne simultanément en mémoire avec tous les modèles de vision sur Render Free.
+
 Les anciennes instances `monteur-video-beta` et `monteur-video-hd` ne sont plus les points d'accès par défaut. La transcription Whisper est désactivée sur le moteur gratuit allégé ; aucune transcription/sous-titre n'est inventé lorsque ce module est absent.
 
 ## Montage automatique cohérent et suivi de progression
