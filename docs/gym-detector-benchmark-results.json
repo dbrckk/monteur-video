@@ -53,7 +53,7 @@
       "commercial weight rights"
     ]
   },
-  "release_decision": "BLOCK D-FINE Objects365 commercial weights. Both controlled Whisper-enabled full-stack arms reached 512MiB, so memory overload is NOT attributable to D-FINE alone; no valid incremental RAM estimate.",
+  "release_decision": "BLOCK D-FINE Objects365 commercial weights. With PyAV-compatible real Whisper transcription, baseline peak 454.4MiB and detector peak hits 512MiB; both exceed safe 420MiB engineering gate.",
   "evidence": {
     "github_workflow_run": "https://github.com/dbrckk/monteur-video/actions/runs/39789036538"
   },
@@ -95,16 +95,20 @@
   },
   "fullstack_ab_512m_01cpu_probe": {
     "date_utc": "2026-10-22",
-    "workflow_run": "https://github.com/dbrckk/monteur-video/actions/runs/39799897286",
-    "baseline_status": "not_qualified",
-    "candidate_status": "not_qualified",
-    "baseline_peak_mib": 512,
+    "workflow_run": "https://github.com/dbrckk/monteur-video/actions/runs/39801098913",
+    "baseline_status": "not_qualified_over_conservative_420mib_gate",
+    "candidate_status": "not_qualified_saturated_512mib",
+    "baseline_peak_mib": 454.4,
     "candidate_peak_mib": 512,
+    "observed_gap_at_ceiling_mib": 57.6,
     "comparison_valid": false,
     "detector_incremental_peak_mib": null,
-    "reason": "Both arms saturate the same 512MiB cgroup ceiling; exact incremental detector overhead is not measurable from censored peaks.",
+    "transcription_test": "passed_with_pyav17",
+    "api_health_test": true,
+    "ffmpeg_portrait_mp4_test": "passed_both_arms",
+    "reason": "Both completed full synthetic Whisper/MediaPipe/MobileNet/API/FFmpeg processing with matching 512MiB cgroups. Baseline peaked at 454.4MiB; D-FINE candidate reached 512MiB. The candidate peak is censored, so 57.6MiB difference is not exact incremental memory and capacity reserve gate of 420MiB failed for both.",
     "production_enabled": false,
     "license_clearance": false,
-    "limitation": "Both arms tested with INSTALL_WHISPER=1 and before PyAV audio compat fix. The public Render Free image normally builds with INSTALL_WHISPER=0."
+    "context": "Public Render Free normally builds with INSTALL_WHISPER=0; benchmark loads all optional models concurrently as stress test."
   }
 }
