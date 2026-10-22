@@ -22,6 +22,23 @@ The GitHub Actions workflow `gym-detector-benchmark.yml` automatically runs on a
 
 Synthetic frames prove **runtime compatibility only**. They do not measure false detections, gym equipment visibility or visual accuracy. Real footage would still be required.
 
+## Official licensing decision — 22 October 2026
+
+The **Objects365 official download conditions** explicitly state that the dataset is "available for the academic purpose only". Its annotations/website have a CC BY 4.0 provision, but the Images section separately disclaims ownership of image copyrights. The D-FINE official README warns that `*_obj365`/`*_obj2coco` pretrained checkpoints **must not be assumed commercially cleared**. A published maintainer clarification request ([D-FINE issue #357](https://github.com/Peterande/D-FINE/issues/357)) also describes the checkpoint rights as unresolved.
+
+Primary sources:
+- [Objects365 Consortium official terms](https://www.objects365.org/download.html)
+- [Upstream D-FINE licensing notice](https://github.com/Peterande/D-FINE)
+- [D-FINE checkpoint rights clarification issue](https://github.com/Peterande/D-FINE/issues/357)
+
+**Decision for Monteur Studio:** Objects365-derived D-FINE checkpoints remain **research-only and not shipped in any commercial/public runtime** without explicit independent commercial clearance. The Apache-2.0 notice for D-FINE source code does not, by itself, override upstream dataset or image-use constraints. This is a conservative release decision, not a legal determination that *every* derivative checkpoint is prohibited.
+
+## Full production-stack engineering benchmark
+
+The separate workflow [`gym-detector-fullstack.yml`](../.github/workflows/gym-detector-fullstack.yml) builds the **actual production Dockerfile with faster-whisper installed**, then builds a disposable extra layer containing ONNX Runtime and this D-FINE model. It operates inside a strict **512 MiB / 0.1 CPU** Docker cgroup with D-FINE, MediaPipe, MobileNet, Whisper tiny, the actual uvicorn/FastAPI server health endpoint, and a real FFmpeg portrait MP4 render. All tasks share the same memory budget and models stay resident during the render. The runtime records memory after each stage; a peak greater than **420 MiB** fails the engineering reserve gate, and an OOM/timeout is reported explicitly as *not qualified*.
+
+This simulates the paid features conservatively on tiny/synthetic inputs, **not a full real-world batch of rushes**; production rights and verified gym-clip accuracy remain required even after an engineering pass. An engineering failure never automatically causes deployment changes.
+
 ## Hard release criteria
 
 A model may only be considered for the public Render Free backend after the following are independently verified:
