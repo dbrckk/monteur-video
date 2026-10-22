@@ -47,6 +47,25 @@ In the first isolated full-stack run, the exact Whisper-enabled production image
 
 **Next commercially practical approach:** retain the currently deployed MediaPipe + MobileNet + conservative geometric equipment framing; evaluate independent fully rights-cleared smaller detectors (or fine-tune on specifically commercially licensed original/synthetic gym clips) on a separate machine and use them only if full pipeline memory/accuracy gates succeed. Apache-2.0 on a model *card* alone does not establish the provenance of training data or inherited base weights.
 
+## Controlled A/B research comparison and model provenance
+
+The full-stack workflow now runs **two independent containers under identical hard limits** (512 MiB, 0.1 CPU): the original production-capable stack without D-FINE as a control arm, and the same stack with the D-FINE Small Objects365 research checkpoint. The experiment downloads no user footage. It reports memory peaks and errors separately, and **never infers an exact model-memory delta from a 512 MiB saturated reading**. A failure of both arms would indicate a general full-stack overload, not evidence uniquely attributable to D-FINE. A successful A/B benchmark still cannot clear Objects365 commercial training-data rights.
+
+A separate [model rights register](model-rights-register.json) records the pretrained weights already bundled by the optional/public Docker builds. Importantly, **ImageNet's official access terms restrict access to the dataset to noncommercial research/education**. That does not by itself settle the licensing of separately distributed ImageNet-derived MobileNet weights, so the register flags their provenance for **manual commercial review**, rather than representing all Apache-2 weight cards as complete clearance. The upstream [Open Images V7 license statement](https://storage.googleapis.com/openimages/web/factsfigures_v7.html) separately states that box annotations are CC BY 4.0 and listed images CC BY 2.0, **but does not warrant individual image license validity**. Future gym detection training must audit each original source, attribution, permitted use and inherited pretrained weights independently.
+
+## Controlled A/B actual outcome — 22 October 2026 (after PyAV compatibility fix)
+
+The [full-stack A/B GitHub Actions run 39801098913](https://github.com/dbrckk/monteur-video/actions/runs/39801098913) tested **two separate Docker containers** using the same hard **512-MiB / 0.1-CPU** limits, the actual optional Whisper-enabled production image, a real Whisper Tiny transcription of a synthetic WAV, a healthy FastAPI server, and an actual FFmpeg portrait export while all models remained resident.
+
+| Arm | Cgroup peak | Conservative threshold | Complete CPU ASR/API/MP4 |
+| --- | ---: | ---: | --- |
+| Control: MediaPipe + MobileNet + Whisper (without D-FINE) | **454.4 MiB** | 420 MiB | Yes |
+| Candidate: same + Objects365 D-FINE-S FP32 | **512.0 MiB** (hard cap) | 420 MiB | Yes |
+
+**Both fail the 420-MiB headroom gate.** Candidate memory exceeds baseline in this controlled run, but the 512-MiB value is censored by the container's ceiling. The **57.6-MiB observed peak gap is not a reliable exact incremental model footprint**; actual unconstrained usage might be higher. This supersedes the earlier two-arms-at-512-MiB run affected by the [faster-whisper/PyAV 19 decoding incompatibility](https://github.com/SYSTRAN/faster-whisper/issues/1589). Verified evidence is preserved in [gym-detector-benchmark-results.json](gym-detector-benchmark-results.json).
+
+D-FINE Objects365 remains research-only due to **both** lack of commercial checkpoint clearance and an unsafe full-stack memory margin. The public Render Free instance normally builds with `INSTALL_WHISPER=0`, so this **optional all-models-concurrently stress test is not a claim that the deployed free service is currently broken**. Further improvements require sequential model loading/unloading, a separately resourced inference service, or a much smaller independently commercially licensed model. No automatic publication should be triggered by a benchmark success.
+
 ## Hard release criteria
 
 A model may only be considered for the public Render Free backend after the following are independently verified:

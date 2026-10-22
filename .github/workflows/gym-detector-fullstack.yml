@@ -63,6 +63,52 @@ jobs:
           cat dfine-fullstack-report.md >> "$GITHUB_STEP_SUMMARY"
           # An OOM, timeout, incompatible model, or rights blocker remains
           # a documented NOT QUALIFIED experiment, not a production release.
+      - name: Run control arm with D-FINE absent (identical 512MiB budget)
+        shell: bash
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=10s 320s docker run --rm \
+            --memory=512m --memory-swap=512m --cpus=0.10 --pids-limit=128 \
+            --security-opt=no-new-privileges --network=bridge \
+            -e MONTEUR_BENCH_NO_DFINE=1 \
+            monteur-v1:dfine-fullstack-probe > dfine-baseline.log 2>&1
+          RESULT=$?
+          set -e
+          echo "Baseline Docker exit: $RESULT" >> "$GITHUB_STEP_SUMMARY"
+          if grep -q 'FULLSTACK_BENCHMARK_JSON=' dfine-baseline.log; then
+            sed -n 's/^FULLSTACK_BENCHMARK_JSON=//p' dfine-baseline.log | tail -n 1 > dfine-baseline.json
+          else
+            printf '{"status":"not_qualified","reason":"baseline_oom_or_timeout","exit_code":%s,"comparison_arm":"baseline","production_enabled":false}\n' "$RESULT" > dfine-baseline.json
+          fi
+          python3 - <<'PY'
+          import json
+          baseline=json.load(open('dfine-baseline.json'))
+          candidate=json.load(open('dfine-fullstack.json'))
+          def peak(record):
+              return record.get('observed_cgroup_peak_mib',record.get('last_memory',{}).get('container_peak_mib'))
+          a,b=peak(baseline),peak(candidate)
+          report={
+              "baseline_status":baseline.get("status"),
+              "candidate_status":candidate.get("status"),
+              "baseline_peak_mib":a,
+              "candidate_peak_mib":b,
+              "observed_peak_gap_mib":round(b-a,1) if isinstance(a,(float,int)) and isinstance(b,(float,int)) else None,
+              "incremental_model_peak_mib":None,  # Censored if the 512MiB cap was reached
+              "comparison_valid":all(isinstance(n,(float,int)) for n in (a,b)) and a<512 and b<512 and baseline.get("status")=="baseline_passed",
+              "production_enabled":False,
+              "rights_cleared":False,
+              "interpretation":"Peak readings at the 512MiB ceiling are saturated/censored and cannot isolate the detector's incremental cost."}
+          json.dump(report,open('dfine-comparison.json','w'),indent=2)
+          with open('dfine-comparison-report.md','w') as f:
+              f.write("## Controlled baseline versus detector\n\n")
+              f.write("- Without D-FINE (peak): "+str(a)+" MiB; "+str(baseline.get('status'))+"\n")
+              f.write("- With D-FINE (peak): "+str(b)+" MiB; "+str(candidate.get('status'))+"\n")
+              f.write("- Can claim exact added memory: **"+str(report['comparison_valid'])+"**\n")
+              f.write("- Observed capped peak gap (NOT exact model overhead): "+str(report['observed_peak_gap_mib'])+" MiB\n")
+              f.write("- Neither benchmark grants Objects365 commercial-use rights.\n")
+          print(json.dumps(report,sort_keys=True))
+          PY
+          cat dfine-comparison-report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Publish complete full-stack benchmark evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -72,4 +118,8 @@ jobs:
             dfine-fullstack.json
             dfine-fullstack.log
             dfine-fullstack-report.md
+            dfine-baseline.log
+            dfine-baseline.json
+            dfine-comparison.json
+            dfine-comparison-report.md
           retention-days: 30
