@@ -10,6 +10,7 @@ on:
       - 'equipment_guard.py'
       - 'dumbbell_classifier.py'
       - 'shot_composition.py'
+      - 'shot_sampling.py'
       - 'soundtrack.py'
       - 'montage.py'
       - 'qa/**'
