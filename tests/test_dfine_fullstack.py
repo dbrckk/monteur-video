@@ -41,7 +41,9 @@ class DfineFullstackSafetyTests(unittest.TestCase):
         doc = json.loads((PROJECT / "docs" /
                            "gym-detector-benchmark-results.json").read_text())
         self.assertFalse(doc["fp32"]["production_qualified"])
-        self.assertIn("HOLD", doc["release_decision"])
+        self.assertTrue(any(state in doc["release_decision"] for state in ("HOLD", "BLOCK")))
+        self.assertFalse(doc["fullstack_initial_512m_01cpu_probe"]["production_enabled"])
+        self.assertEqual(doc["fullstack_initial_512m_01cpu_probe"]["actual_cgroup_peak_mib"], 512.0)
 
     def test_workflow_not_copied_into_render(self):
         source = (PROJECT / "scripts" / "Dockerfile.dfine-fullstack").read_text()
