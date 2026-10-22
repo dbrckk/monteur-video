@@ -12,6 +12,7 @@ on:
       - 'equipment_guard.py'
       - 'dumbbell_classifier.py'
       - 'shot_composition.py'
+      - 'shot_sampling.py'
       - 'scripts/download_dumbbell_model.py'
       - 'soundtrack.py'
       - 'montage.py'
