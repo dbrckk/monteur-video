@@ -17,6 +17,7 @@ from equipment_guard import (bar_like_span, grip_crop_risk, stable_grip_crop_ris
                              stable_wide_bar, wide_limb_span)
 from dumbbell_classifier import classify_handheld_dumbbell, stable_dumbbell_evidence
 from shot_composition import visible_composition_bounds, plan_safe_composition
+from shot_sampling import sample_rgb_timeline
 
 POSE_WIDTH, POSE_HEIGHT = 320, 180
 POSE_FPS = 1
@@ -27,17 +28,13 @@ BODY = (11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28)
 TORSO = (11, 12, 23, 24)
 
 
-def _decode_rgb(source: Path, start: float, seconds: float) -> list[bytes]:
-    """Limit untrusted input decode to a handful of low-resolution RGB frames."""
-    seconds = min(seconds, POSE_SECONDS)
-    command = ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error",
-               "-ss", f"{start:.3f}", "-i", str(source), "-t", f"{seconds:.3f}",
-               "-an", "-vf", f"fps={POSE_FPS},scale={POSE_WIDTH}:{POSE_HEIGHT}:flags=fast_bilinear,format=rgb24",
-               "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1"]
-    raw = subprocess.run(command, check=True, capture_output=True, timeout=35).stdout
-    frame_bytes = POSE_WIDTH * POSE_HEIGHT * 3
-    return [raw[i:i + frame_bytes] for i in range(0, len(raw), frame_bytes)
-            if len(raw[i:i + frame_bytes]) == frame_bytes]
+def _decode_rgb(source: Path, start: float,
+                seconds: float) -> list[bytes | tuple[float, bytes]]:
+    """Decode at most 14 local RGB frames across the selected shot.
+
+    Long clips carry local timestamps for noncontiguous scan windows.
+    """
+    return sample_rgb_timeline(source, start, seconds)
 
 
 def _target_from_pose(points: list, fraction: float) -> tuple[float, float, float] | None:
@@ -115,8 +112,8 @@ def _smooth_anchors(measured: list[tuple[float, float]], duration: float,
     return tuple(points)
 
 
-def _infer_poses(frames: list[bytes], model: Path,
-                 fraction: float) -> list[tuple[float, float, float]]:
+def _infer_poses(frames: list[bytes | tuple[float, bytes]], model: Path,
+                 fraction: float) -> list[tuple]:
     """Run real Google Pose Landmarker detections on decoded RGB frames."""
     import mediapipe as mp
     import numpy as np
@@ -133,12 +130,15 @@ def _infer_poses(frames: list[bytes], model: Path,
     measured = []
     previous = None
     with mp.tasks.vision.PoseLandmarker.create_from_options(opts) as detector:
-        for i, frame in enumerate(frames):
+        for i, sample in enumerate(frames):
+            # Long-rush samples are discontinuous and carry the actual shot
+            # timestamp. Using the sample index would pan at the wrong time.
+            local_t, frame = sample if isinstance(sample, tuple) else (float(i), sample)
             # Use writable contiguous storage; MediaPipe's C++ bridge expects it.
             values = np.frombuffer(frame, dtype=np.uint8).copy().reshape(
                 POSE_HEIGHT, POSE_WIDTH, 3)
             picture = mp.Image(image_format=mp.ImageFormat.SRGB, data=values)
-            result = detector.detect_for_video(picture, i * 1000 // POSE_FPS)
+            result = detector.detect_for_video(picture, round(local_t * 1000))
             chosen = _select_person(result.pose_landmarks, fraction, previous)
             if chosen is not None:
                 x, confidence = chosen
@@ -154,7 +154,7 @@ def _infer_poses(frames: list[bytes], model: Path,
                     frame, person_points, fraction, x)
                 bounds = visible_composition_bounds(
                     person_points, bar_bounds, dumbbell_score)
-                measured.append((i / POSE_FPS, x, confidence, bar_bounds,
+                measured.append((local_t, x, confidence, bar_bounds,
                                  spread_risk, hand_edge_risk, dumbbell_score,
                                  bounds))
                 previous = x
@@ -186,9 +186,17 @@ def plan_pose_reframe(source: Path, start: float, duration: float,
         confidence = median(item[2] for item in measured)
         if confidence < 0.55:
             return None
-        # Avoid huge jumps when a detected subject disappears then reappears.
-        if any(b[0] - a[0] > 4.0 for a, b in zip(measured, measured[1:])):
-            return None
+        # A gap within a sampled window suggests lost identity/occlusion.
+        # A gap across deliberately unsampled long-shot windows is expected,
+        # but a large off-camera subject jump must not be interpolated blindly.
+        observed = [sample[0] if isinstance(sample, tuple) else float(i)
+                    for i, sample in enumerate(frames)]
+        for a, b in zip(measured, measured[1:]):
+            gap = b[0] - a[0]
+            if gap > 4 and any(a[0] + 1 < t < b[0] - 1 for t in observed):
+                return None
+            if gap > 6 and abs(b[1] - a[1]) > 0.30:
+                return ReframePlan("composition_safe", (), round(confidence, 3))
         # Use actual visible body/shaft extent before selecting a blurred
         # layout. Keep a moving 9:16 crop whenever it fits and pans safely.
         composition = plan_safe_composition([
