@@ -440,7 +440,7 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
             crop_x = "(iw-ow)/2"
         if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0" and plan.mode in {
                 "equipment_safe", "wide_grip_safe", "grip_edge_safe",
-                "dumbbell_safe"}:
+                "dumbbell_safe", "composition_safe"}:
             # Wide bars, grips or a visible hand outside the proposed crop
             # cannot safely fit 9:16. Preserve the entire source over a
             # blurred fill rather than cutting hands or nearby equipment.
@@ -497,11 +497,14 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
         "wide_grip_safe_clips": sum(p.mode == "wide_grip_safe" for p in reframes),
         "grip_edge_safe_clips": sum(p.mode == "grip_edge_safe" for p in reframes),
         "dumbbell_safe_clips": sum(p.mode == "dumbbell_safe" for p in reframes),
+        "composition_guided_clips": sum(p.mode == "composition_guided" for p in reframes),
+        "composition_safe_clips": sum(p.mode == "composition_safe" for p in reframes),
         "center_fallback_clips": (len(clips) - sum(
             p.mode in {"pose_guided", "motion_guided",
                        "equipment_safe", "wide_grip_safe", "grip_edge_safe",
-                       "dumbbell_safe"} for p in reframes)) if vertical else 0,
-        "strategy": "pose_and_dumbbell_grip_guard_then_motion_then_center",
+                       "dumbbell_safe", "composition_guided", "composition_safe"}
+            for p in reframes)) if vertical else 0,
+        "strategy": "visible_body_and_gear_bounds_then_pose_and_motion",
         "smooth_interpolation": True,
     }
 
