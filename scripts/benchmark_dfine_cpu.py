@@ -179,14 +179,20 @@ def run() -> dict:
         safe_memory = result["runtime_memory"]["container_peak_mib"]
         result["measured_under_512_mib"] = (
             safe_memory is not None and safe_memory <= 512)
+        result["headroom_mib"] = (
+            round(512 - safe_memory, 1) if safe_memory is not None else None)
+        # MediaPipe and MobileNet are included; leave RAM headroom for HTTP,
+        # FFmpeg and possible Whisper rather than accepting a 500-MiB pass.
+        result["coexistence_headroom_gate_mib"] = 420
         outputs_valid = (
             len(output) >= 2 and
             all(isfinite(v).all() for v in output) and
             all(v.size > 0 for v in output)
         )
         result["status"] = (
-            "benchmark_passed_license_pending"
-            if outputs_valid and result["measured_under_512_mib"]
+            "coexistence_passed_full_stack_and_license_pending"
+            if (outputs_valid and result["measured_under_512_mib"]
+                and safe_memory <= 420)
             else "not_qualified"
         )
     except Exception as exc:
@@ -201,4 +207,4 @@ if __name__ == "__main__":
     print("BENCHMARK_JSON=" + json.dumps(report, ensure_ascii=False, sort_keys=True),
           flush=True)
     # Failure intentionally leaves the production code and deployment intact.
-    sys.exit(0 if report["status"] == "benchmark_passed_license_pending" else 2)
+    sys.exit(0 if report["status"] == "coexistence_passed_full_stack_and_license_pending" else 2)
