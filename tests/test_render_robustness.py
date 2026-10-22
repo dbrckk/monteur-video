@@ -3,8 +3,9 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from editor import Clip, render
+from editor import Clip, render, create_captions
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg absent")
@@ -20,11 +21,19 @@ class RenderingRobustnessTests(unittest.TestCase):
                             "-t", "4", "-c:v", "mpeg4", "-c:a", "aac", str(source)], check=True)
             segment = {"start": .5, "end": 3.0, "text": "Chaque repetition compte vraiment"}
             metadata = {}
-            render(source, output, [Clip(0, 4, 1)], metadata, [segment],
-                   vertical=True, has_audio=True, size=360)
+            observed_captions = []
+            def capture_captions(path, clip, transcript, vertical):
+                made = create_captions(path, clip, transcript, vertical)
+                if made:
+                    observed_captions.append(path.read_text(encoding="utf-8"))
+                return made
+            with patch("editor.create_captions", side_effect=capture_captions):
+                render(source, output, [Clip(0, 4, 1)], metadata, [segment],
+                       vertical=True, has_audio=True, size=360)
             self.assertGreater(output.stat().st_size, 1000)
-            captions = (home / "segments" / "0000.ass").read_text()
-            self.assertIn("CHAQUE REPETITION", captions)
+            self.assertTrue(observed_captions)
+            self.assertIn("CHAQUE REPETITION", observed_captions[0])
+            self.assertFalse(list(home.glob(".video-segments-*")))
             self.assertGreater(metadata["rendered_duration_seconds"], 0)
 
 
