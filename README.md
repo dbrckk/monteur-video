@@ -25,6 +25,12 @@ Les longs rushs sont analysés sur des fenêtres réparties sur toute leur duré
 
 L'encodage est limité en threads et les sous-clips ont de légers fondus audio aux points de coupe, sans musique externe ajoutée. Chaque sous-processus FFmpeg critique dispose d'une limite de temps ; un échec explicite est préférable à un montage bloqué indéfiniment. Comme les images ne sont échantillonnées qu'à intervalles pour économiser le CPU, le meilleur mouvement d'un rush très long peut encore passer entre deux fenêtres.
 
+## Cadrage combiné sportif + équipement sans rogner les mouvements
+
+Le moteur exploite les **vrais points corporels visibles de MediaPipe**, les extrémités de barre détectées par contraste près des poignets et, quand la classification MobileNetV2 « dumbbell » est fiable, une marge autour des mains. Il en déduit un **intervalle horizontal d'occupation observable**, sans inventer de boîte d'objet. Lorsque cet intervalle rentre dans le ratio 9:16, un optimiseur choisit la fenêtre qui garde le sportif et les éléments observés, avec **panorama lissé et vitesse maximale bornée**. Si le matériel est plus large que le ratio ou qu'un mouvement de caméra limité le couperait à répétition, le moteur conserve la scène entière sur un fond flouté.
+
+Les métriques `composition_guided_clips` et `composition_safe_clips` différencient les plans cadrés serrés et ceux conservés entièrement. Les indices sont échantillonnés (au plus 14 secondes par prise) : ils n'équivalent ni à une détection d'objet autonome ni à la garantie de suivi d'une barre ou d'une machine pendant toute la vidéo. **Un vrai détecteur de boîtes pour barres, haltères et machines reste à valider** sur plusieurs clips réels et sur l'environnement Render gratuit. Certains poids Open Images V7 disposent de telles classes, mais leurs conditions de licence et la charge mémoire doivent être vérifiées avant intégration ; la version publique ne télécharge pas ces modèles.
+
 ## Protection du matériel de musculation en vidéo 9:16
 
 Quand MediaPipe observe des **poignets visibles** et qu'une longue ligne horizontale contrastée, située près des deux poignets, persiste sur plusieurs images, Monteur Studio repère un **indice visuel de barre longue**. Si la largeur observée ne rentre pas dans une fenêtre 9:16, le montage préserve automatiquement la totalité de l'image originale au centre d'un fond flouté vertical. Le même plan large de sécurité est proposé aux **prises de bras exceptionnellement écartées**, afin de réduire les coupes sur les mains ou les haltères proches des poignets.

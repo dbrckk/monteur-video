@@ -9,6 +9,7 @@ on:
       - 'pose_reframe.py'
       - 'equipment_guard.py'
       - 'dumbbell_classifier.py'
+      - 'shot_composition.py'
       - 'soundtrack.py'
       - 'montage.py'
       - 'qa/**'

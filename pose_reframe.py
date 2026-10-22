@@ -16,6 +16,7 @@ from smart_reframe import ReframePlan
 from equipment_guard import (bar_like_span, grip_crop_risk, stable_grip_crop_risk,
                              stable_wide_bar, wide_limb_span)
 from dumbbell_classifier import classify_handheld_dumbbell, stable_dumbbell_evidence
+from shot_composition import visible_composition_bounds, plan_safe_composition
 
 POSE_WIDTH, POSE_HEIGHT = 320, 180
 POSE_FPS = 1
@@ -151,8 +152,11 @@ def _infer_poses(frames: list[bytes], model: Path,
                 hand_edge_risk = grip_crop_risk(person_points, fraction, x)
                 dumbbell_score = classify_handheld_dumbbell(
                     frame, person_points, fraction, x)
+                bounds = visible_composition_bounds(
+                    person_points, bar_bounds, dumbbell_score)
                 measured.append((i / POSE_FPS, x, confidence, bar_bounds,
-                                 spread_risk, hand_edge_risk, dumbbell_score))
+                                 spread_risk, hand_edge_risk, dumbbell_score,
+                                 bounds))
                 previous = x
     return measured
 
@@ -185,6 +189,13 @@ def plan_pose_reframe(source: Path, start: float, duration: float,
         # Avoid huge jumps when a detected subject disappears then reappears.
         if any(b[0] - a[0] > 4.0 for a, b in zip(measured, measured[1:])):
             return None
+        # Use actual visible body/shaft extent before selecting a blurred
+        # layout. Keep a moving 9:16 crop whenever it fits and pans safely.
+        composition = plan_safe_composition([
+            (r[0], r[1], r[7]) for r in measured if len(r) >= 8
+        ], duration, fraction)
+        if composition is not None:
+            return composition
         # An actual bar-like shaft near both tracked hands is crop-critical.
         # If it will not fit, keep the *entire* rush width over a blurred
         # background rather than misidentify a barbell or cut off plates.
