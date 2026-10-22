@@ -53,7 +53,7 @@
       "commercial weight rights"
     ]
   },
-  "release_decision": "BLOCK: Official Objects365 academic-only terms and full-stack benchmark reached 512 MiB before FFmpeg/API. Keep D-FINE off public Render image.",
+  "release_decision": "BLOCK D-FINE Objects365 commercial weights. Both controlled Whisper-enabled full-stack arms reached 512MiB, so memory overload is NOT attributable to D-FINE alone; no valid incremental RAM estimate.",
   "evidence": {
     "github_workflow_run": "https://github.com/dbrckk/monteur-video/actions/runs/39789036538"
   },
@@ -92,5 +92,19 @@
     "measured_as_cgroup_peak": true,
     "caution": "Memory ceiling reached by model co-residency before a complete transcribe/API/FFmpeg render. User uploads are never sent to this research-only tool.",
     "release_decision": "HOLD: engineering memory budget failed AND upstream Objects365 dataset academic-only rights unapproved."
+  },
+  "fullstack_ab_512m_01cpu_probe": {
+    "date_utc": "2026-10-22",
+    "workflow_run": "https://github.com/dbrckk/monteur-video/actions/runs/39799897286",
+    "baseline_status": "not_qualified",
+    "candidate_status": "not_qualified",
+    "baseline_peak_mib": 512,
+    "candidate_peak_mib": 512,
+    "comparison_valid": false,
+    "detector_incremental_peak_mib": null,
+    "reason": "Both arms saturate the same 512MiB cgroup ceiling; exact incremental detector overhead is not measurable from censored peaks.",
+    "production_enabled": false,
+    "license_clearance": false,
+    "limitation": "Both arms tested with INSTALL_WHISPER=1 and before PyAV audio compat fix. The public Render Free image normally builds with INSTALL_WHISPER=0."
   }
 }
