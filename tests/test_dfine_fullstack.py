@@ -45,6 +45,31 @@ class DfineFullstackSafetyTests(unittest.TestCase):
         self.assertFalse(doc["fullstack_initial_512m_01cpu_probe"]["production_enabled"])
         self.assertEqual(doc["fullstack_initial_512m_01cpu_probe"]["actual_cgroup_peak_mib"], 512.0)
 
+    def test_no_research_weights_are_cleared_for_commercial_release(self):
+        rights = json.loads((PROJECT / "docs" /
+                             "model-rights-register.json").read_text())
+        blocked = rights["research_only"]
+        self.assertTrue(blocked)
+        for model in blocked:
+            self.assertTrue(model["never_ship_public"])
+            self.assertEqual(model["commercial_clearance"], "blocked_for_release")
+        self.assertTrue(all(
+            item["commercial_clearance"] == "pending_manual_review"
+            for item in rights["production_weights"]))
+
+    def test_ab_experiment_uses_identical_cgroup_limits_for_both_arms(self):
+        workflow = (PROJECT / ".github" / "workflows" /
+                    "gym-detector-fullstack.yml").read_text()
+        self.assertIn("MONTEUR_BENCH_NO_DFINE=1", workflow)
+        self.assertEqual(workflow.count("--memory=512m"), 2)
+        self.assertEqual(workflow.count("--cpus=0.10"), 2)
+        self.assertIn("comparison_valid", workflow)
+        self.assertIn("dfine-baseline.json", workflow)
+        script = (PROJECT / "scripts" /
+                  "benchmark_dfine_fullstack.py").read_text()
+        self.assertIn("BASELINE_NO_DETECTOR", script)
+        self.assertIn("dfine_not_loaded_control_arm", script)
+
     def test_workflow_not_copied_into_render(self):
         source = (PROJECT / "scripts" / "Dockerfile.dfine-fullstack").read_text()
         self.assertIn("FROM monteur-v1:fullstack-base", source)
