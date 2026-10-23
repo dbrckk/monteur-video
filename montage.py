@@ -426,6 +426,9 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                 "rendered_seconds": child["rendered_duration_seconds"],
                 "speech_engine": child["speech_engine"],
                 "action_quality": child.get("action_quality", {}),
+                "selected_motion_profile": (
+                    child.get("action_story", {}).get("selected_motion_profile",
+                                                     {"phase": "unknown"})),
                 "auto_reframe": child.get("auto_reframe", {}),
                 "visual_analysis": child.get("visual_analysis", "unavailable"),
                 "captured_at": duration.get("captured_at"),
@@ -440,7 +443,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         if (sequence_strategy == "visual_continuity_no_reliable_timestamps"
                 and len(rendered) >= 5):
             permutation, cut_continuity = optimize_rendered_order(
-                rendered, [part["rendered_seconds"] for part in details])
+                rendered, [part["rendered_seconds"] for part in details],
+                phase_profiles=[part["selected_motion_profile"] for part in details])
         if permutation != list(range(len(rendered))):
             order = [order[old] for old in permutation]
             rendered = [rendered[old] for old in permutation]
@@ -521,6 +525,9 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "sequence_strategy": sequence_strategy,
         "sequence_order": order,
         "cut_continuity": cut_continuity,
+        "selected_motion_phase_order": [
+            part["selected_motion_profile"].get("phase", "unknown")
+            for part in details],
         "capture_timestamps": [item.get("captured_at") for item in info],
         "visual_analysis": ("motion_luminance_detail" if any(
             x["visual_analysis"] != "unavailable" for x in details) else "unavailable"),
