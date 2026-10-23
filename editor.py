@@ -445,14 +445,20 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
                 crop_x = "(iw-ow)/2"
             if vertical and os.getenv("MONTEUR_SMART_REFRAME", "1") != "0" and plan.mode in {
                     "equipment_safe", "wide_grip_safe", "grip_edge_safe",
-                    "dumbbell_safe", "composition_safe"}:
-                # Wide bars, grips or a visible hand outside the proposed crop
-                # cannot safely fit 9:16. Preserve the entire source over a
-                # blurred fill rather than cutting hands or nearby equipment.
+                    "dumbbell_safe", "composition_safe", "composition_focus_safe"}:
+                # Fit the smallest *observed* safe horizontal region when
+                # landmarks/gear do not fit 9:16. Unlike a tight 9:16 crop,
+                # the foreground remains entirely visible; blur fills bands.
+                protected_crop = ""
+                if plan.mode == "composition_focus_safe" and plan.safe_bounds is not None:
+                    left, right = plan.safe_bounds
+                    if 0 <= left < right <= 1 and right - left >= 0.36:
+                        protected_crop = (f"crop=iw*{right-left:.5f}:ih:"
+                                          f"iw*{left:.5f}:0,")
                 scaling = (f"split=2[wide_bg][wide_fg];"
                            f"[wide_bg]scale={w}:{h}:force_original_aspect_ratio=increase,"
                            f"crop={w}:{h},boxblur=10:1[soft_bg];"
-                           f"[wide_fg]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                           f"[wide_fg]{protected_crop}scale={w}:{h}:force_original_aspect_ratio=decrease,"
                            f"setsar=1[full_shot];"
                            "[soft_bg][full_shot]overlay=(W-w)/2:(H-h)/2:shortest=1,"
                            "setsar=1")
@@ -515,10 +521,12 @@ def render(source: Path, destination: Path, clips: list[Clip], metadata: dict,
         "dumbbell_safe_clips": sum(p.mode == "dumbbell_safe" for p in reframes),
         "composition_guided_clips": sum(p.mode == "composition_guided" for p in reframes),
         "composition_safe_clips": sum(p.mode == "composition_safe" for p in reframes),
+        "composition_focus_safe_clips": sum(p.mode == "composition_focus_safe" for p in reframes),
         "center_fallback_clips": (len(clips) - sum(
             p.mode in {"pose_guided", "motion_guided",
                        "equipment_safe", "wide_grip_safe", "grip_edge_safe",
-                       "dumbbell_safe", "composition_guided", "composition_safe"}
+                       "dumbbell_safe", "composition_guided",
+                       "composition_safe", "composition_focus_safe"}
             for p in reframes)) if vertical else 0,
         "strategy": "visible_body_and_gear_bounds_then_pose_and_motion",
         "smooth_interpolation": True,
