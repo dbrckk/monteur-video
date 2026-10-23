@@ -24,6 +24,6 @@ jobs:
           ffmpeg -hide_banner -version | head -n 1
           python -m pip install -r requirements-dev.txt
       - name: Compile Python modules
-        run: python -m compileall -q shot_sampling.py shot_composition.py dumbbell_classifier.py equipment_guard.py pose_reframe.py smart_reframe.py editor.py montage.py server.py tests
+        run: python -m compileall -q cut_continuity.py shot_sampling.py shot_composition.py dumbbell_classifier.py equipment_guard.py pose_reframe.py smart_reframe.py editor.py montage.py server.py tests
       - name: Run unit, API and real render tests
         run: python -m unittest discover -s tests -v
