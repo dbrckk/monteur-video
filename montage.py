@@ -270,14 +270,21 @@ def chronological_order(sources: Sequence[Path], samples: Sequence[list],
     if len(names) != len(sources):
         raise ValueError("Noms de sources chronologiques incohérents")
     timestamps = [item.get("captured_at") for item in info]
-    if not any(timestamps):
+    known = [i for i, value in enumerate(timestamps)
+             if isinstance(value, str) and value]
+    # A single tagged rush, or identical creation_time tags on every rush,
+    # cannot establish chronology. Native Android camera filenames can still
+    # recover a consistent *local* timeline if EVERY filename is recognized.
+    # Never combine local filename times with distinct UTC-aware camera tags.
+    reliable_camera_tags = (len(known) >= 2 and
+                            len({timestamps[i] for i in known}) > 1)
+    hashes = [_content_fingerprint(source) for source in sources]
+    if not reliable_camera_tags:
         filename_times = [_filename_capture_time(name) for name in names]
         if all(filename_times) and len(set(filename_times)) > 1:
             return sorted(range(len(sources)), key=lambda i:
-                          (filename_times[i], _content_fingerprint(sources[i]))), "camera_filename_time"
-    hashes = [_content_fingerprint(source) for source in sources]
-    known = [i for i, value in enumerate(timestamps) if isinstance(value, str) and value]
-    if len(known) >= 2 and len({timestamps[i] for i in known}) > 1:
+                          (filename_times[i], hashes[i])), "camera_filename_time"
+    if reliable_camera_tags:
         anchors = sorted(known, key=lambda i: (timestamps[i], hashes[i]))
         if len(known) == len(sources):
             return anchors, "capture_time"
