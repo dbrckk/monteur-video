@@ -98,7 +98,12 @@ def optimize_rendered_order(
     # factorial enumeration and preserves the current story opening/closing.
     interior = tuple(range(1, count - 1))
     states: dict[tuple[int, int], tuple[float, tuple[int, ...]]] = {}
+    first_group = min(groups[item] for item in interior)
     for bit, item in enumerate(interior):
+        # The first DP state is a transition too. Do not skip an earlier
+        # verified phase group before the main transition loop even starts.
+        if guarded and groups[item] != first_group:
+            continue
         states[(1 << bit, item)] = (jump(0, item) + 0.28 * abs(item - 1), (item,))
     full_mask = (1 << len(interior)) - 1
     for mask in range(1, full_mask + 1):
