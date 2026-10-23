@@ -20,6 +20,9 @@ class ReframePlan:
     mode: str
     anchors: tuple[tuple[float, float], ...] = ()  # local seconds, crop x from 0 to 1
     confidence: float = 0.0
+    # Optional normalized source-x interval to protect on a focused fit layout.
+    # Never interpreted as a semantic detection bounding box.
+    safe_bounds: tuple[float, float] | None = None
 
 
 def _sample_gray(source: Path, start: float, seconds: float) -> list[bytes]:

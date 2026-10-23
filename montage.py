@@ -477,6 +477,8 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                                              for d in details),
             "composition_safe_clips": sum(d["auto_reframe"].get("composition_safe_clips", 0)
                                            for d in details),
+            "composition_focus_safe_clips": sum(d["auto_reframe"].get("composition_focus_safe_clips", 0)
+                                                 for d in details),
             "motion_guided_clips": sum(d["auto_reframe"].get("motion_guided_clips", 0)
                                        for d in details),
             "center_fallback_clips": sum(d["auto_reframe"].get("center_fallback_clips", 0)

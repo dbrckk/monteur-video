@@ -626,12 +626,13 @@
           ? `Plan large sur fond flouté : ${reframe.dumbbell_safe_clips || 0} plan(s) avec classification IA locale de l'haltère, ${reframe.equipment_safe_clips || 0} indice(s) de barre, ${reframe.wide_grip_safe_clips || 0} prise(s) très écartée(s), ${reframe.grip_edge_safe_clips || 0} plan(s) avec main près du bord. Une classification d'haltère n'est pas une localisation précise du matériel. `
           : "";
         const composed = reframe.composition_guided_clips || 0;
+        const focusSafe = reframe.composition_focus_safe_clips || 0;
         const fullScene = reframe.composition_safe_clips || 0;
-        const compositionLabel = composed || fullScene
-          ? `Cadrage du corps et du matériel visible : ${composed} plan(s) en fenêtre 9:16 mobile, ${fullScene} plan(s) conservé(s) en entier car le cadrage serré aurait coupé des éléments. Il s'agit de repères corporels et d'indices visuels, pas de boîtes de détection d'objets garanties. `
+        const compositionLabel = composed || focusSafe || fullScene
+          ? `Cadrage du corps et du matériel visible : ${composed} plan(s) en fenêtre 9:16 mobile, ${focusSafe} plan(s) rapproché(s) en préservant les éléments observés sur fond flouté, ${fullScene} plan(s) conservé(s) entièrement faute de marge de sécurité. Ce sont des repères corporels et des indices visuels, pas des boîtes de détection garanties. `
           : "";
         const reframeLabel = reframe.enabled && meta.aspect === "vertical"
-          ? compositionLabel + gymLayoutLabel + (composed > 0 || fullScene > 0 || reframe.pose_guided_clips > 0 || reframe.motion_guided_clips > 0
+          ? compositionLabel + gymLayoutLabel + (composed > 0 || focusSafe > 0 || fullScene > 0 || reframe.pose_guided_clips > 0 || reframe.motion_guided_clips > 0
             ? `Détection corporelle : ${reframe.pose_guided_clips || 0} plan(s). Suivi du mouvement : ${reframe.motion_guided_clips || 0} plan(s). Cadrage central : ${reframe.center_fallback_clips || 0} plan(s). `
             : reframe.equipment_safe_clips > 0 || reframe.wide_grip_safe_clips > 0 || reframe.grip_edge_safe_clips > 0 || reframe.dumbbell_safe_clips > 0
             ? `Cadrage central : ${reframe.center_fallback_clips || 0} plan(s). `

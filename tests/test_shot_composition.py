@@ -60,11 +60,24 @@ class CompositionGeometryTests(unittest.TestCase):
             self.assertLessEqual(left, 0.24 + 0.025)
             self.assertGreaterEqual(left + fraction, 0.49 - 0.025)
 
-    def test_too_wide_gear_keeps_full_scene(self):
+    def test_wide_gear_uses_larger_safe_focus_instead_of_full_scene(self):
         samples = [(t, 0.2, HorizontalBounds(0.07, 0.80)) for t in range(6)]
         plan = plan_safe_composition(samples, 6, 0.316)
-        self.assertEqual(plan.mode, "composition_safe")
+        self.assertEqual(plan.mode, "composition_focus_safe")
         self.assertEqual(ffmpeg_crop_x(plan), "(iw-ow)/2")
+        self.assertLess(plan.safe_bounds[0], 0.07)
+        self.assertGreater(plan.safe_bounds[1], 0.80)
+        self.assertLess(plan.safe_bounds[1] - plan.safe_bounds[0], 0.84)
+
+    def test_extremely_wide_or_early_only_evidence_preserves_full_source(self):
+        almost_full = [(t, 0.2, HorizontalBounds(0.03, 0.95))
+                       for t in range(6)]
+        self.assertEqual(plan_safe_composition(
+            almost_full, 6, 0.316).mode, "composition_safe")
+        short_evidence = [(t, 0.2, HorizontalBounds(0.07, 0.80))
+                          for t in range(6)]
+        self.assertEqual(plan_safe_composition(
+            short_evidence, 60, 0.316).mode, "composition_safe")
 
     def test_sudden_unsafe_pan_selects_full_scene(self):
         sample = [(t, 0.15, HorizontalBounds(0.07, 0.27)) for t in range(3)]
@@ -110,6 +123,52 @@ class CompositionFFmpegTests(unittest.TestCase):
                 str(result)], text=True).strip()
             self.assertEqual(dims, "360,640")
             self.assertGreater(result.stat().st_size, 3000)
+
+    def test_real_protected_focus_keeps_gear_ends_and_enlarges_subject(self):
+        from editor import Clip, render
+        # Two colored proxies stand for opposite ends of a piece of equipment.
+        # Compared with full-width fit, both ends remain visible but spread
+        # much farther across the 360-pixel portrait foreground.
+        samples = [(float(t), 0.5, HorizontalBounds(0.24, 0.76))
+                   for t in range(5)]
+        plan = plan_safe_composition(samples, 5, 0.3164)
+        self.assertEqual(plan.mode, "composition_focus_safe")
+        with tempfile.TemporaryDirectory() as folder:
+            source, output = Path(folder) / "wide.mp4", Path(folder) / "focused.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i",
+                "color=c=gray:s=320x180:r=15:d=2,"
+                "drawbox=x=77:y=0:w=28:h=180:color=red:t=fill,"
+                "drawbox=x=215:y=0:w=28:h=180:color=blue:t=fill",
+                "-c:v", "mpeg4", str(source)
+            ], check=True, capture_output=True)
+            meta = {}
+            with patch("pose_reframe.plan_pose_reframe", return_value=plan):
+                render(source, output, [Clip(0, 1.6, 1)], meta, [],
+                       vertical=True, has_audio=False, size=360,
+                       source_dimensions=(320, 180))
+            self.assertEqual(meta["auto_reframe"]["composition_focus_safe_clips"], 1)
+            self.assertEqual(meta["auto_reframe"]["center_fallback_clips"], 0)
+            dims = subprocess.check_output([
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=width,height", "-of", "csv=p=0",
+                str(output)], text=True).strip()
+            self.assertEqual(dims, "360,640")
+            raw = subprocess.check_output([
+                "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error",
+                "-i", str(output), "-frames:v", "1", "-f", "rawvideo",
+                "-pix_fmt", "rgb24", "pipe:1"])
+            def pixel(x):
+                i = (320 * 360 + x) * 3
+                return raw[i:i + 3]
+            # Colored bar ends occupy the near sides of the 9:16 foreground
+            # after conservative focus, rather than sitting near its center.
+            red, blue = pixel(36), pixel(322)
+            self.assertGreater(red[0], 145, red)
+            self.assertLess(red[2], 125, red)
+            self.assertGreater(blue[2], 145, blue)
+            self.assertLess(blue[0], 125, blue)
 
     def test_too_wide_layout_keeps_both_edges_in_real_video(self):
         from editor import Clip, render

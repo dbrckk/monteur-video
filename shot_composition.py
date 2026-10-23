@@ -70,6 +70,25 @@ def visible_composition_bounds(
     return HorizontalBounds(max(0.0, lo), min(1.0, hi))
 
 
+def _protected_fit_plan(parsed: list[tuple], duration: float,
+                        crop_fraction: float) -> ReframePlan:
+    """Use a closer protected view only when the observed footprint permits it.
+
+    The interval is grounded in measured landmarks/near-hand evidence, not
+    a predicted equipment box. Uncertain, overly spread or early-only samples
+    keep the original entire scene visible over blurred background.
+    """
+    if not parsed or parsed[-1][0] - parsed[0][0] < duration * 0.50:
+        return ReframePlan("composition_safe")
+    left = max(0.0, min(box.left for _, _, box in parsed) - 0.025)
+    right = min(1.0, max(box.right for _, _, box in parsed) + 0.025)
+    span = right - left
+    if crop_fraction + 0.035 < span <= 0.84:
+        return ReframePlan("composition_focus_safe", (), 0.0,
+                           (round(left, 5), round(right, 5)))
+    return ReframePlan("composition_safe")
+
+
 def plan_safe_composition(
     readings: list[tuple],
     duration: float,
@@ -101,7 +120,7 @@ def plan_safe_composition(
     overflow = [x for x in parsed
                 if x[2].right - x[2].left > crop_fraction - 0.010]
     if len(overflow) >= max(2, math.ceil(len(parsed) * 0.25)):
-        return ReframePlan("composition_safe", (), 0.0)
+        return _protected_fit_plan(parsed, duration, crop_fraction)
 
     positions = []
     for when, current, box in parsed:
@@ -114,7 +133,7 @@ def plan_safe_composition(
         target_left = max(low, min(high, current * width))
         positions.append((when, current, target_left / width, box))
     if len(positions) < max(3, math.ceil(len(parsed) * 0.70)):
-        return ReframePlan("composition_safe", (), 0.0)
+        return _protected_fit_plan(parsed, duration, crop_fraction)
 
     # Pan smoothly, but never claim a safe crop when the speed limit leaves
     # hands/equipment outside the picture at multiple observed frames.
@@ -134,7 +153,7 @@ def plan_safe_composition(
         if crop_left > box.left + 0.022 or crop_left + crop_fraction < box.right - 0.022:
             failures += 1
     if failures >= max(2, math.ceil(0.25 * len(positions))):
-        return ReframePlan("composition_safe", (), 0.0)
+        return _protected_fit_plan(parsed, duration, crop_fraction)
     if duration > anchors[-1][0]:
         anchors.append((duration, anchors[-1][1]))
     if useful_shifts < max(2, math.ceil(len(positions) * 0.30)):
