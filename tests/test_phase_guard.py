@@ -104,6 +104,20 @@ class RealPhaseSequenceTests(unittest.TestCase):
         self.assertLess(plain["boundary_color_jump_after"],
                         report["boundary_color_jump_after"])
 
+    def test_same_measured_phase_can_still_improve_rgb_continuity(self):
+        # A phase guard protects boundaries, not the relative order of two
+        # verified rushes inside one continuous effort group.
+        profiles = [{"phase": stage} for stage in (
+            "measured_low_motion", "observed_effort", "observed_effort",
+            "measured_low_motion", "measured_low_motion")]
+        order, report = optimize_rendered_order(
+            self.paths, [1.5] * 5, phase_profiles=profiles)
+        self.assertEqual(order, [0, 2, 1, 3, 4])
+        self.assertTrue(report["phase_guard_enabled"])
+        self.assertTrue(report["reordered"])
+        self.assertLess(report["boundary_color_jump_after"],
+                        report["boundary_color_jump_before"])
+
     def test_all_unknown_profiles_keep_safe_existing_rgb_fallback(self):
         all_unknown = [{"phase": "unknown"}] * 5
         ordering, report = optimize_rendered_order(
