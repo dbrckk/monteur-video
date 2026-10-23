@@ -19,6 +19,7 @@ from editor import THEMES, detect_scenes, edit_video, execute, probe_media, soci
 from visual_quality import analyze_visual
 from soundtrack import select_music_profile
 from color_grade import grade_plan
+from cut_continuity import optimize_rendered_order
 
 MAX_SOURCES = 10
 FILTER_PRESETS = {
@@ -394,7 +395,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         work = Path(scratch)
         rendered = []
         details = []
-        selected_speech = []
+        selected_speech_by_rush = []
         combined_clips = []
         for position, index in enumerate(order):
             source, duration, budget = sources[index], info[index], budgets[index]
@@ -415,7 +416,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                 if progress else None,
             )
             rendered.append(part)
-            selected_speech.extend(child.get("selected_transcript", []))
+            selected_speech_by_rush.append(child.get("selected_transcript", []))
             combined_clips.extend({"source_index": index, "sequence_position": position,
                                    **clip} for clip in child["clips"])
             details.append({
@@ -430,6 +431,28 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
                 "captured_at": duration.get("captured_at"),
                 "color_grade": grades["source_grades"][index]["correction"],
             })
+        # Recover the actual joined-cut appearance *after* each rush was edited.
+        # Do not reorder footage with reliable camera dates or chronology anchors.
+        # Keep opening/closing and original order if an edge frame cannot decode.
+        permutation = list(range(len(rendered)))
+        cut_continuity = {"evaluated": False, "reordered": False,
+                          "reason": "capture_order_preserved_or_too_few_sources"}
+        if (sequence_strategy == "visual_continuity_no_reliable_timestamps"
+                and len(rendered) >= 5):
+            permutation, cut_continuity = optimize_rendered_order(
+                rendered, [part["rendered_seconds"] for part in details])
+        if permutation != list(range(len(rendered))):
+            order = [order[old] for old in permutation]
+            rendered = [rendered[old] for old in permutation]
+            old_to_new = {old: new for new, old in enumerate(permutation)}
+            details = [{**details[old], "sequence_position": position}
+                       for position, old in enumerate(permutation)]
+            combined_clips = [
+                {**clip, "sequence_position": old_to_new[clip["sequence_position"]]}
+                for clip in combined_clips]
+            combined_clips.sort(key=lambda clip: clip["sequence_position"])
+        selected_speech = [phrase for old in permutation
+                           for phrase in selected_speech_by_rush[old]]
         concat = work / "playlist.txt"
         concat.write_text("".join(f"file '{part.name}'\n" for part in rendered), encoding="utf-8")
         staged = work / "assembled.mp4"
@@ -497,6 +520,7 @@ def edit_many(sources: Sequence[Path], destination: Path, *, theme: str = "fitne
         "color_grade": grades,
         "sequence_strategy": sequence_strategy,
         "sequence_order": order,
+        "cut_continuity": cut_continuity,
         "capture_timestamps": [item.get("captured_at") for item in info],
         "visual_analysis": ("motion_luminance_detail" if any(
             x["visual_analysis"] != "unavailable" for x in details) else "unavailable"),
