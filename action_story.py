@@ -214,6 +214,38 @@ def candidate_cadence_score(start: float, end: float,
     return round(min(0.8, best), 3)
 
 
+
+def candidate_pose_score(start: float, end: float,
+                         intervals: list[dict]) -> float:
+    """Small, conservative bonus for observed joint flexion in visible footage.
+
+    Never introduce an unsupported exercise name or overrule image quality.
+    A 1-fps detected interval is not proof that every frame within is an
+    exercise repetition, hence capped below standard sustained-motion score.
+    """
+    if not all(isinstance(x, (float, int)) and not isinstance(x, bool)
+               and math.isfinite(x) for x in (start, end)) or end <= start:
+        return 0.0
+    best = 0.0
+    for item in intervals:
+        if not isinstance(item, dict):
+            continue
+        if (item.get("kind") != "observed_joint_flexion_extension"
+                or item.get("joint") not in {"knee", "elbow"}):
+            continue
+        a, b, confidence = (item.get("start"), item.get("end"),
+                            item.get("confidence"))
+        if not all(isinstance(x, (int, float)) and not isinstance(x, bool)
+                   and math.isfinite(x) for x in (a, b, confidence)):
+            continue
+        if confidence < 0.50 or b <= a:
+            continue
+        coverage = max(0.0, min(end, b) - max(start, a)) / (end - start)
+        if coverage >= 0.55:
+            best = max(best, min(0.9, confidence * coverage * 1.35))
+    return round(best, 3)
+
+
 def candidate_action_score(start: float, end: float, bouts: list[dict]) -> float:
     if end <= start:
         return 0.0

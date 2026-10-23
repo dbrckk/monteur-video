@@ -215,7 +215,8 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
                visual_samples: list | None = None,
                beat_seconds: float | None = None,
                action_bouts: list[dict] | None = None,
-               motion_cadence: list[dict] | None = None) -> list[Clip]:
+               motion_cadence: list[dict] | None = None,
+               pose_motion_intervals: list[dict] | None = None) -> list[Clip]:
     """Select highlights across the entire recording, respecting pauses and visual cuts.
 
     Stratified buckets prevent a long, low-dialogue video from collapsing into its
@@ -270,6 +271,9 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
             if motion_cadence:
                 from action_story import candidate_cadence_score
                 score += candidate_cadence_score(cursor, stop, motion_cadence)
+            if pose_motion_intervals:
+                from action_story import candidate_pose_score
+                score += candidate_pose_score(cursor, stop, pose_motion_intervals)
             candidates.append(Clip(round(cursor, 3), round(stop, 3), score))
             cursor = stop
     if action_bouts:
@@ -287,6 +291,9 @@ def plan_clips(duration: float, scenes: list[float], silences: list[tuple[float,
             score = (3.0 + quality_bonus
                      + candidate_action_score(clip_start, clip_end, action_bouts)
                      + candidate_cadence_score(clip_start, clip_end, motion_cadence or []))
+            if pose_motion_intervals:
+                from action_story import candidate_pose_score
+                score += candidate_pose_score(clip_start, clip_end, pose_motion_intervals)
             candidates.append(Clip(clip_start, clip_end, round(score, 3), True))
     if not candidates:
         # Never export the entire rush when the requested highlight is short.
@@ -572,12 +579,18 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     from action_story import narrative_signals
     action_story = narrative_signals(visual_samples or [], transcript, info["duration"])
     from pose_evidence import analyze_pose
+    if progress:
+        progress(0.34, "pose")
     action_story["pose_evidence"] = analyze_pose(source, info["duration"])
+    if progress:
+        progress(0.38, "highlights")
     clips = plan_clips(info["duration"], scenes, [], transcript, target_seconds,
                        allow_short=allow_short, visual_samples=visual_samples,
                        beat_seconds=beat_grid,
                        action_bouts=action_story["action_bouts"],
-                       motion_cadence=action_story["possible_motion_cadence"])
+                       motion_cadence=action_story["possible_motion_cadence"],
+                       pose_motion_intervals=action_story["pose_evidence"].get(
+                           "motion_intervals", []))
     from action_story import narrative_coverage, completed_action_coverage
     action_story["selected_coverage"] = narrative_coverage(clips, action_story["timeline_phases"])
     action_story["whole_action_coverage"] = completed_action_coverage(clips, action_story["action_bouts"])
@@ -586,6 +599,11 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     from action_story import selected_motion_profile
     action_story["selected_motion_profile"] = selected_motion_profile(
         clips, visual_samples or [], action_story["action_bouts"])
+    # Audit only pose evidence overlapping the actual selected export.
+    action_story["selected_joint_motion_windows"] = sum(
+        1 for hint in action_story["pose_evidence"].get("motion_intervals", [])
+        if any(hint["start"] < clip.end and hint["end"] > clip.start
+               for clip in clips))
     from color_grade import adaptive_shot_filters
     shot_filters = adaptive_shot_filters(visual_samples or [], clips, theme,
                                         shared_grade=color_reference,

@@ -1,9 +1,9 @@
 """Optional bounded human pose evidence from actual video frames.
 
-Disabled by default. MediaPipe Solutions is deliberately optional because the
-stable free CPU render service must remain functional without native ML wheels.
-When enabled, infer only visible knee flexion/extension cycles, not squat
-identity or correct exercise technique. Video and model errors fail open.
+Enabled in the full Docker image with a local model; optional in lightweight
+installations without native ML wheels. Uses the supported MediaPipe Tasks API
+to detect visible knee/elbow flexion cycles, not exercise identity, repetition
+counts or technique. Video/model errors preserve FFmpeg rendering.
 """
 from __future__ import annotations
 
@@ -93,41 +93,145 @@ def _decode_frames(source: Path, start: float, length: float):
         yield start + i, raw[i * FRAME_SIZE:(i + 1) * FRAME_SIZE]
 
 
+
+def elbow_angles(landmarks: list, visibility: float = 0.65) -> list[float]:
+    """Visible shoulder-elbow-wrist angles; no inference for hidden limbs."""
+    found = []
+    for shoulder, elbow, wrist in ((11, 13, 15), (12, 14, 16)):
+        if len(landmarks) <= wrist:
+            continue
+        group = [landmarks[i] for i in (shoulder, elbow, wrist)]
+        if any(not math.isfinite(float(getattr(p, "visibility", 0)))
+               or not math.isfinite(float(getattr(p, "presence", 1.0)))
+               or min(p.visibility, getattr(p, "presence", 1.0)) < visibility
+               for p in group):
+            continue
+        angle = joint_angle((group[0].x, group[0].y),
+                            (group[1].x, group[1].y),
+                            (group[2].x, group[2].y))
+        if angle is not None:
+            found.append(angle)
+    return found
+
+
+def _measure_joint_windows(source: Path, windows: list[tuple[float, float]],
+                           model_path: Path) -> list[list[dict]]:
+    """Run the current MediaPipe Tasks API with bounded local CPU frames.
+
+    Keep results separated by scan window; MediaPipe VIDEO timestamps must be
+    strictly increasing. Multi-person footage is ambiguous without reliable
+    identity tracking: never attach arbitrary joints to the subject.
+    """
+    import mediapipe as mp
+    import numpy as np
+
+    opts = mp.tasks.vision.PoseLandmarkerOptions(
+        base_options=mp.tasks.BaseOptions(
+            model_asset_path=str(model_path),
+            delegate=mp.tasks.BaseOptions.Delegate.CPU),
+        running_mode=mp.tasks.vision.RunningMode.VIDEO,
+        num_poses=2,
+        min_pose_detection_confidence=0.60,
+        min_pose_presence_confidence=0.60,
+        min_tracking_confidence=0.60,
+        output_segmentation_masks=False)
+    results = []
+    previous_millis = -1
+    with mp.tasks.vision.PoseLandmarker.create_from_options(opts) as detector:
+        for start, length in windows:
+            collected = []
+            previous_center = None
+            for time, rgb in _decode_frames(source, start, length):
+                if len(rgb) != FRAME_SIZE:
+                    continue
+                millis = round(time * 1000)
+                if millis <= previous_millis:
+                    continue
+                previous_millis = millis
+                array = np.frombuffer(rgb, dtype=np.uint8).copy().reshape(
+                    HEIGHT, WIDTH, 3)
+                picture = mp.Image(image_format=mp.ImageFormat.SRGB, data=array)
+                detected = detector.detect_for_video(picture, millis)
+                # Do not switch from one athlete to another in group shots.
+                if len(detected.pose_landmarks) != 1:
+                    continue
+                points = detected.pose_landmarks[0]
+                # Stable torso position is a conservative identity safeguard.
+                # Drop implausible one-second jumps rather than blend two gym
+                # athletes into a fictional joint movement.
+                torso = [p.x for index in (11, 12, 23, 24)
+                         if index < len(points)
+                         for p in (points[index],)
+                         if (math.isfinite(p.x) and
+                             min(getattr(p, "visibility", 0.0),
+                                 getattr(p, "presence", 1.0)) >= 0.65)]
+                if len(torso) < 2:
+                    continue
+                center = median(torso)
+                if previous_center is not None and abs(center - previous_center) > 0.22:
+                    continue
+                previous_center = center
+                knees = knee_angles(points)
+                elbows = elbow_angles(points)
+                collected.append({
+                    "time": time,
+                    "knee": median(knees) if knees else None,
+                    "elbow": median(elbows) if elbows else None,
+                })
+            results.append(collected)
+    return results
+
+
 def analyze_pose(source: Path, duration: float) -> dict:
-    """Opt-in pose inference. Preserve rendering when unavailable or unreliable."""
+    """Bounded offline joint evidence, with FFmpeg-only fallback on errors.
+
+    Only exact supported MediaPipe Tasks inference is accepted. This evidence
+    may guide highlight selection; it does NOT identify an exercise, athlete,
+    completed repetition or correct technique.
+    """
     if os.getenv("MONTEUR_ENABLE_POSE", "0") != "1":
-        return {"status": "disabled", "method": "optional_mediapipe_pose"}
+        return {"status": "disabled", "method": "mediapipe_tasks_visible_joints"}
+    if not math.isfinite(duration) or duration < 3.0:
+        return {"status": "insufficient_evidence", "reason": "video_too_short"}
+    model = Path(os.getenv("MONTEUR_POSE_MODEL",
+                            str(Path(__file__).resolve().parent /
+                                "models" / "pose_landmarker_lite.task")))
+    if not model.is_file():
+        return {"status": "unavailable", "reason": "offline_pose_model_missing"}
     try:
-        import mediapipe as mp
-        import numpy as np
         from editor import analysis_windows
-        if not hasattr(mp, "solutions") or not hasattr(mp.solutions, "pose"):
-            return {"status": "unavailable", "reason": "mediapipe_solutions_unavailable"}
-        evidence_by_window = []
-        valid_frames = 0
-        with mp.solutions.pose.Pose(static_image_mode=True, model_complexity=0,
-                                     min_detection_confidence=0.65) as pose:
-            for start, length in analysis_windows(duration):
-                points: list[tuple[float, float]] = []
-                for time, data in _decode_frames(source, start, length):
-                    img = np.frombuffer(data, dtype=np.uint8).reshape((HEIGHT, WIDTH, 3))
-                    result = pose.process(img)
-                    if result.pose_landmarks is None:
-                        continue
-                    angles = knee_angles(result.pose_landmarks.landmark)
-                    if angles:
-                        points.append((time, median(angles)))
-                        valid_frames += 1
-                # Do not merge time-disconnected sampling windows into a
-                # fictional continuous human movement.
-                evidence_by_window.append(knee_flexion_evidence(points))
-        detected = [item for item in evidence_by_window if item["detected"]]
-        evidence = max(detected, key=lambda item: item["confidence"]) if detected else {
-            "detected": False, "reason": "no_confident_joint_flexion"}
-        return {"status": "measured" if valid_frames else "insufficient_evidence",
-                "method": "mediapipe_visible_knee_angles",
-                "valid_frames": valid_frames, **evidence}
+        windows = analysis_windows(duration)
+        if len(windows) > 3:
+            windows = [windows[0], windows[len(windows) // 2], windows[-1]]
+        observed = _measure_joint_windows(Path(source), windows, model)
+        intervals = []
+        for scan in observed:
+            for joint in ("knee", "elbow"):
+                points = [(frame["time"], frame[joint])
+                          for frame in scan if frame.get(joint) is not None]
+                report = knee_flexion_evidence(
+                    points, min_swing=22.0 if joint == "knee" else 28.0)
+                if not report["detected"]:
+                    continue
+                intervals.append({
+                    "start": round(points[0][0], 2),
+                    "end": round(min(duration, points[-1][0] + 0.5), 2),
+                    "joint": joint,
+                    "kind": "observed_joint_flexion_extension",
+                    "confidence": report["confidence"],
+                    "not_exercise_repetition_count": True,
+                })
+        return {
+            "status": "measured" if any(observed) else "insufficient_evidence",
+            "method": "mediapipe_tasks_visible_joints",
+            "valid_frames": sum(len(scan) for scan in observed),
+            "motion_intervals": intervals,
+            "detected": bool(intervals),
+            "exercise_classification": None,
+            "repetition_count": None,
+        }
     except (ImportError, FileNotFoundError):
         return {"status": "unavailable", "reason": "optional_pose_runtime_missing"}
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError,
+            AttributeError, TypeError) as exc:
         return {"status": "unavailable", "reason": type(exc).__name__}
