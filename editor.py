@@ -581,6 +581,11 @@ def edit_video(source: Path, destination: Path, *, theme: str = "fitness",
     from action_story import narrative_coverage, completed_action_coverage
     action_story["selected_coverage"] = narrative_coverage(clips, action_story["timeline_phases"])
     action_story["whole_action_coverage"] = completed_action_coverage(clips, action_story["action_bouts"])
+    # Derive phase evidence solely from the exact clips selected for export.
+    # Missing/unsampled visual frames remain unknown (never inferred rest).
+    from action_story import selected_motion_profile
+    action_story["selected_motion_profile"] = selected_motion_profile(
+        clips, visual_samples or [], action_story["action_bouts"])
     from color_grade import adaptive_shot_filters
     shot_filters = adaptive_shot_filters(visual_samples or [], clips, theme,
                                         shared_grade=color_reference,
