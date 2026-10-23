@@ -1,9 +1,9 @@
 """Optional bounded human pose evidence from actual video frames.
 
-Disabled by default. MediaPipe Solutions is deliberately optional because the
-stable free CPU render service must remain functional without native ML wheels.
-When enabled, infer only visible knee flexion/extension cycles, not squat
-identity or correct exercise technique. Video and model errors fail open.
+Enabled in the full Docker image with a local model; optional in lightweight
+installations without native ML wheels. Uses the supported MediaPipe Tasks API
+to detect visible knee/elbow flexion cycles, not exercise identity, repetition
+counts or technique. Video/model errors preserve FFmpeg rendering.
 """
 from __future__ import annotations
 
@@ -140,6 +140,7 @@ def _measure_joint_windows(source: Path, windows: list[tuple[float, float]],
     with mp.tasks.vision.PoseLandmarker.create_from_options(opts) as detector:
         for start, length in windows:
             collected = []
+            previous_center = None
             for time, rgb in _decode_frames(source, start, length):
                 if len(rgb) != FRAME_SIZE:
                     continue
@@ -155,10 +156,27 @@ def _measure_joint_windows(source: Path, windows: list[tuple[float, float]],
                 if len(detected.pose_landmarks) != 1:
                     continue
                 points = detected.pose_landmarks[0]
+                # Stable torso position is a conservative identity safeguard.
+                # Drop implausible one-second jumps rather than blend two gym
+                # athletes into a fictional joint movement.
+                torso = [p.x for index in (11, 12, 23, 24)
+                         if index < len(points)
+                         for p in (points[index],)
+                         if (math.isfinite(p.x) and
+                             min(getattr(p, "visibility", 0.0),
+                                 getattr(p, "presence", 1.0)) >= 0.65)]
+                if len(torso) < 2:
+                    continue
+                center = median(torso)
+                if previous_center is not None and abs(center - previous_center) > 0.22:
+                    continue
+                previous_center = center
+                knees = knee_angles(points)
+                elbows = elbow_angles(points)
                 collected.append({
                     "time": time,
-                    "knee": median(knee_angles(points)) if knee_angles(points) else None,
-                    "elbow": median(elbow_angles(points)) if elbow_angles(points) else None,
+                    "knee": median(knees) if knees else None,
+                    "elbow": median(elbows) if elbows else None,
                 })
             results.append(collected)
     return results
@@ -187,12 +205,10 @@ def analyze_pose(source: Path, duration: float) -> dict:
             windows = [windows[0], windows[len(windows) // 2], windows[-1]]
         observed = _measure_joint_windows(Path(source), windows, model)
         intervals = []
-        valid_frames = 0
         for scan in observed:
             for joint in ("knee", "elbow"):
                 points = [(frame["time"], frame[joint])
                           for frame in scan if frame.get(joint) is not None]
-                valid_frames += len(points) if joint == "knee" else 0
                 report = knee_flexion_evidence(
                     points, min_swing=22.0 if joint == "knee" else 28.0)
                 if not report["detected"]:
