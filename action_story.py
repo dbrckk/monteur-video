@@ -274,6 +274,95 @@ def narrative_coverage(clips: list, phases: list[dict]) -> dict:
             "phase_detection": "motion_proxy_not_pose_recognition"}
 
 
+
+def selected_motion_profile(clips: list, samples: list, bouts: list[dict]) -> dict:
+    """Describe ONLY observed motion in footage that survived the actual edit.
+
+    This is a conservative sequencing hint, never an exercise, preparation
+    or recovery diagnosis. Sparse visual analysis produces "unknown" so color
+    optimization does not invent a phase from unsampled camera footage.
+    """
+    def bounds(clip):
+        if isinstance(clip, dict):
+            return clip.get("start"), clip.get("end")
+        return getattr(clip, "start", None), getattr(clip, "end", None)
+
+    intervals = []
+    for clip in clips:
+        start, end = bounds(clip)
+        if (not isinstance(start, (int, float)) or isinstance(start, bool)
+                or not isinstance(end, (int, float)) or isinstance(end, bool)
+                or not math.isfinite(start) or not math.isfinite(end)
+                or end <= start):
+            continue
+        intervals.append((float(start), float(end)))
+    total = sum(end - start for start, end in intervals)
+    result = {"phase": "unknown", "evidence": "selected_visual_motion_only",
+              "measured_fraction": 0.0, "observed_effort_ratio": None,
+              "not_exercise_or_recovery_recognition": True}
+    if not total:
+        return result
+
+    # The visual sampler runs at 2 fps in short windows. Each valid sample
+    # supports only its own 0.5-second neighbourhood: never bridge unknown
+    # minutes between scan windows or infer content from adjacent rushes.
+    measured = set()
+    motions = []
+    for sample in samples:
+        t = getattr(sample, "time", None)
+        motion = getattr(sample, "motion", None)
+        luminance = getattr(sample, "luminance", None)
+        detail = getattr(sample, "detail", None)
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                   and math.isfinite(v)
+                   for v in (t, motion, luminance, detail)):
+            continue
+        if not (25 <= luminance <= 230 and detail >= 2):
+            continue
+        if any(start <= t < end for start, end in intervals) and t not in measured:
+            measured.add(float(t))
+            motions.append(float(motion))
+    seconds = 0.0
+    for t in measured:
+        seconds += sum(max(0.0, min(end, t + 0.25) - max(start, t - 0.25))
+                       for start, end in intervals)
+    coverage = min(1.0, seconds / total)
+    result["measured_fraction"] = round(coverage, 3)
+    if len(measured) < 4 or coverage < 0.55:
+        return result
+
+    # All classified intervals are measured sustained-motion bouts. Do not
+    # treat a mention of an exercise in speech as proof of visible action.
+    valid_bouts = []
+    for bout in bouts:
+        start, end = bout.get("start"), bout.get("end")
+        confidence = bout.get("confidence", 0.0)
+        if (bout.get("kind") == "observed_motion_bout"
+                and all(isinstance(x, (int, float)) and not isinstance(x, bool)
+                        and math.isfinite(x) for x in (start, end, confidence))
+                and end > start and confidence >= 0.55):
+            valid_bouts.append((start, end))
+    # Merge bouts first: overlapping detections must never double count effort.
+    merged = []
+    for start, end in sorted(valid_bouts):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    effort = sum(max(0.0, min(right, end) - max(left, start))
+                 for left, right in intervals for start, end in merged)
+    ratio = min(1.0, effort / total)
+    result["observed_effort_ratio"] = round(ratio, 3)
+    if ratio >= 0.52:
+        result["phase"] = "observed_effort"
+    elif ratio <= 0.12 and 0.25 < median(motions) <= 2.5:
+        # Low movement is not proof of recovery, just a measured calmer shot.
+        result["phase"] = "measured_low_motion"
+    else:
+        result["phase"] = "mixed"
+    return result
+
+
 def narrative_signals(samples: list, transcript: list[dict], duration: float) -> dict:
     phases = action_phases(samples, duration)
     explicit = speech_exercise(transcript)
