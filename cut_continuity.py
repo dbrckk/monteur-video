@@ -41,6 +41,7 @@ def _jump(a: tuple[float, float, float],
 
 def optimize_rendered_order(
     videos: Sequence[Path], durations: Sequence[float],
+    phase_profiles: Sequence[dict] | None = None,
 ) -> tuple[list[int], dict]:
     """Held-Karp order of interior shots, with story opener and ending fixed.
 
@@ -54,6 +55,27 @@ def optimize_rendered_order(
                      "method": "rendered_rgb_edge_dynamic_programming"}
     if count < 5 or count > 10 or count != len(durations):
         return original, {**not_evaluated, "reason": "insufficient_or_invalid_sources"}
+    # Reliable relative-motion phases act as hard sequencing boundaries.
+    # Never let matching RGB colors move an observed effort before a quieter
+    # group or across an unknown, unsampled rush. Only comparable, consecutive
+    # phases can be exchanged. With weak evidence, retain legacy RGB scoring.
+    known_phases = {"observed_effort", "measured_low_motion"}
+    phases = ([item.get("phase", "unknown") if isinstance(item, dict)
+               else "unknown" for item in phase_profiles]
+              if phase_profiles is not None and len(phase_profiles) == count
+              else ["unknown"] * count)
+    guarded = len(set(phases) & known_phases) >= 2
+    groups = [0] * count
+    if guarded:
+        previous = None
+        for i, phase in enumerate(phases):
+            # Unknown/mixed material is a unique stationary anchor.
+            key = phase if phase in known_phases else ("unverified", i)
+            if i and key != previous:
+                groups[i] = groups[i - 1] + 1
+            elif i:
+                groups[i] = groups[i - 1]
+            previous = key
     edges = []
     for path, length in zip(videos, durations):
         if not math.isfinite(length) or length < 0.6:
@@ -90,6 +112,11 @@ def optimize_rendered_order(
                 flag = 1 << bit
                 if mask & flag:
                     continue
+                if guarded and any(
+                        not (mask & (1 << other_bit))
+                        and groups[other] < groups[item]
+                        for other_bit, other in enumerate(interior)):
+                    continue
                 next_key = (mask | flag, item)
                 score = current_cost + jump(last, item) + 0.28 * abs(item - next_rank)
                 candidate = (score, path + (item,))
@@ -114,4 +141,8 @@ def optimize_rendered_order(
                       "boundary_color_jump_before": actual_jump(original),
                       "boundary_color_jump_after": actual_jump(selected),
                       "protected_first_last": True,
+                      "phase_guard_enabled": guarded,
+                      "phase_protected_transitions": (
+                          sum(groups[i] != groups[i - 1]
+                              for i in range(1, count)) if guarded else 0),
                       "not_semantic_scene_recognition": True}
