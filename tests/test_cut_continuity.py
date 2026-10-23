@@ -80,7 +80,7 @@ class RenderedCutContinuityTests(unittest.TestCase):
                     return_value=(list(range(5)),
                                   "visual_continuity_no_reliable_timestamps")),
               patch("montage.edit_video", side_effect=copied_edit)):
-            result = edit_many(self.paths, dest, target_seconds=8,
+            result = edit_many(self.paths, dest, target_seconds=10,
                                aspect="vertical", size=360, transcribe=False)
         self.assertEqual(result["sequence_order"], [0, 2, 1, 3, 4])
         self.assertTrue(result["cut_continuity"]["reordered"])
@@ -115,7 +115,7 @@ class RenderedCutContinuityTests(unittest.TestCase):
               patch("montage.chronological_order",
                     return_value=(list(range(5)), "capture_time")),
               patch("montage.edit_video", side_effect=copied_edit)):
-            result = edit_many(self.paths, destination, target_seconds=8,
+            result = edit_many(self.paths, destination, target_seconds=10,
                                aspect="vertical", size=360, transcribe=False)
         self.assertEqual(result["sequence_order"], list(range(5)))
         self.assertFalse(result["cut_continuity"]["evaluated"])
