@@ -1,0 +1,4 @@
+# Facultatif pour l'audit local du visage (aucun modèle distant, aucune API).
+# Le rendu FFmpeg et le contrôle audio fonctionnent sans ces dépendances.
+opencv-python-headless>=4.8,<5
+numpy>=1.26

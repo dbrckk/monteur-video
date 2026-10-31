@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.mp4
+*.mov
+*.wav
+*.jpg
+*.ass
+*.srt
+*.qa.json
+*.report.json
+functional_results_v*.json
+examples/demo_media/
+my_project.json
+approvals.json

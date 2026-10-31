@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920">
+<rect width="1080" height="1920" fill="#291827"/>
+<rect x="0" y="0" width="1080" height="320" fill="#E55E7E" fill-opacity=".35"/>
+<rect x="875" y="300" width="205" height="1380" fill="#E55E7E" fill-opacity=".35"/>
+<rect x="0" y="1550" width="1080" height="370" fill="#E55E7E" fill-opacity=".35"/>
+<rect x="110" y="330" width="745" height="1190" rx="28" fill="#7EE0AC" fill-opacity=".15" stroke="#7EE0AC" stroke-width="6"/>
+<g fill="white" font-family="DejaVu Sans, sans-serif" font-weight="bold" text-anchor="middle">
+<text x="540" y="205" font-size="45">ZONE HAUTE : CONTRÔLES VARIABLES</text>
+<text x="965" y="970" font-size="32" transform="rotate(-90 965 970)">BOUTONS PLATEFORME</text>
+<text x="540" y="1795" font-size="42">LÉGENDE / CTA / NAVIGATION</text>
+<text x="480" y="820" font-size="54">ZONE VISUELLE SÛRE</text>
+<text x="480" y="895" font-size="35">Lèvres, produit, démonstration</text>
+<text x="480" y="1425" font-size="33">Sous-titres : vérifier sur téléphone</text>
+</g></svg>

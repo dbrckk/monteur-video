@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "forbidden_paid_services": true,
+  "product": {
+    "name": "Exemple de produit autorisé — renseigner le produit réel",
+    "claims_verified": false,
+    "disclosure": "PUBLICITÉ · LIEN AFFILIÉ · INFLUENCEUSE IA",
+    "evidence_urls": [],
+    "product_reference": "media/packshot_autorise.png"
+  },
+  "talking_clips": [
+    {
+      "file": "media/influenceuse_01.mp4",
+      "source_in": 0,
+      "duration": 9,
+      "rights": "ai_generated",
+      "sync": "native",
+      "smart_crop": "face"
+    },
+    {
+      "file": "media/influenceuse_02.mp4",
+      "source_in": 0,
+      "duration": 10,
+      "rights": "ai_generated",
+      "sync": "native"
+    }
+  ],
+  "overlays": [
+    {
+      "file": "media/packshot_autorise.png",
+      "start": 3,
+      "duration": 2,
+      "rights": "owned",
+      "focus_x": 0.5,
+      "focus_y": 0.5,
+      "motion": "push_in",
+      "fade": 0.16,
+      "subject_crop": [
+        0.1,
+        0.08,
+        0.8,
+        0.84
+      ]
+    },
+    {
+      "file": "media/texture_autorisee.mp4",
+      "source_in": 0,
+      "start": 12,
+      "duration": 3,
+      "rights": "owned",
+      "motion": "static",
+      "fade": 0.12
+    }
+  ],
+  "caption_mode": "none",
+  "words": [],
+  "music": {
+    "file": "media/musique_originale.wav",
+    "rights": "owned",
+    "volume": 0.12
+  },
+  "face_policy": "required"
+}

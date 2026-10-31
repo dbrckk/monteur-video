@@ -1,0 +1,14 @@
+{
+  "reviewer": "",
+  "video_sha256": "",
+  "reviews": {
+    "product_packaging": false,
+    "spoken_french": false,
+    "lip_sync_human": false,
+    "caption_accuracy": false,
+    "claims_evidence": false,
+    "commercial_rights": false,
+    "disclosure_platform": false,
+    "smartphone_review": false
+  }
+}

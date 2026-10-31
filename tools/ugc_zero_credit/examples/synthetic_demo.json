@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "forbidden_paid_services": true,
+  "product": {
+    "name": "PRODUIT FICTIF — DÉMONSTRATION SYNTHÉTIQUE NON PUBLIABLE",
+    "claims_verified": true,
+    "disclosure": "PUBLICITÉ · LIEN AFFILIÉ · INFLUENCEUSE IA"
+  },
+  "talking_clips": [
+    {
+      "file": "demo_media/presentation_demo.mp4",
+      "source_in": 0,
+      "duration": 4,
+      "sync": "native",
+      "rights": "owned"
+    }
+  ],
+  "overlays": [
+    {
+      "file": "demo_media/produit.png",
+      "start": 1.0,
+      "duration": 1.2,
+      "rights": "owned",
+      "focus_x": 0.5,
+      "focus_y": 0.5,
+      "subject_crop": [
+        0.2,
+        0.22,
+        0.6,
+        0.6
+      ],
+      "motion": "push_in",
+      "fade": 0.16
+    },
+    {
+      "file": "demo_media/petales.png",
+      "start": 2.6,
+      "duration": 0.8,
+      "rights": "owned",
+      "focus_x": 0.5,
+      "focus_y": 0.5,
+      "motion": "pan_left",
+      "fade": 0.14
+    }
+  ],
+  "caption_mode": "words",
+  "words": [
+    {
+      "clip": 0,
+      "start": 0.35,
+      "end": 0.8,
+      "text": "DÉMO"
+    },
+    {
+      "clip": 0,
+      "start": 0.9,
+      "end": 1.15,
+      "text": "SANS"
+    },
+    {
+      "clip": 0,
+      "start": 1.25,
+      "end": 1.7,
+      "text": "CRÉDITS"
+    },
+    {
+      "clip": 0,
+      "start": 2.4,
+      "end": 2.8,
+      "text": "TIMINGS"
+    },
+    {
+      "clip": 0,
+      "start": 2.85,
+      "end": 3.2,
+      "text": "EXEMPLES"
+    }
+  ],
+  "music": {
+    "file": "demo_media/music_original.wav",
+    "rights": "owned",
+    "volume": 0.1
+  },
+  "face_policy": "review"
+}
